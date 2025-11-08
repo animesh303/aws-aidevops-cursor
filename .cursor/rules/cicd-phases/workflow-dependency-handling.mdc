@@ -1,5 +1,5 @@
 ---
-description: Patterns for managing inter-code dependencies in GitHub Actions workflows during multi-code-type generation.
+description: Patterns for managing inter-code dependencies in GitHub Actions workflows during single-environment generation.
 alwaysApply: false
 ---
 ## Single Dependency Pattern
@@ -14,7 +14,7 @@ alwaysApply: false
   - name: Upload Lambda package
     uses: actions/upload-artifact@v4
     with:
-      name: lambda-package-dev # Environment-specific naming
+      name: lambda-package
       path: lambda-package.zip
       retention-days: 1
   ```
@@ -27,11 +27,11 @@ alwaysApply: false
   ```yaml
   on:
     workflow_run:
-      workflows: ["Python Dev"] # Wait for Python workflow
+      workflows: ["Python"] # Wait for Python workflow
       types: [completed]
-      branches: [develop]
+      branches: [main]
     push:
-      branches: [develop] # Fallback trigger
+      branches: [main] # Fallback trigger
   ```
 - **CRITICAL**: Download artifacts from upstream workflow BEFORE any Terraform operations (with error handling):
 
@@ -41,7 +41,7 @@ alwaysApply: false
     continue-on-error: true
     id: download-artifact
     with:
-      name: lambda-package-dev
+      name: lambda-package
       run-id: ${{ github.event.workflow_run.id }}
       github-token: ${{ secrets.GITHUB_TOKEN }}
       path: ./lambda-package
@@ -49,7 +49,7 @@ alwaysApply: false
   - name: Verify artifact downloaded successfully
     if: steps.download-artifact.outcome != 'success'
     run: |
-      echo "Error: Failed to download artifact 'lambda-package-dev' from upstream workflow"
+      echo "Error: Failed to download artifact 'lambda-package' from upstream workflow"
       echo "Upstream workflow run ID: ${{ github.event.workflow_run.id }}"
       exit 1
   ```
@@ -91,11 +91,11 @@ If a code type depends on multiple others, use `workflow_run` triggers for all u
 ```yaml
 on:
   workflow_run:
-    workflows: ["Python Dev", "Docker Dev"] # Wait for all upstream workflows
-    types: [completed]
-    branches: [develop]
-  push:
-    branches: [develop] # Fallback trigger
+    workflows: ["Python", "Docker"] # Wait for all upstream workflows
+      types: [completed]
+      branches: [main]
+    push:
+      branches: [main] # Fallback trigger
 ```
 
 **Important**: When multiple `workflow_run` triggers exist, `github.event.workflow_run.id` refers to the workflow that triggered this run. To download artifacts from specific upstream workflows:
@@ -154,37 +154,23 @@ Download artifacts from all upstream workflows and combine as needed for deploym
 
 ---
 
-## Environment-Specific Considerations
+## Single Environment Considerations
 
-### Dev Environment
-
-- Artifact names should include environment: `lambda-package-dev`
-- Workflow triggers: `workflow_run` on `develop` branch OR `push` to `develop` branch
-- Use shorter retention for artifacts (1 day typically sufficient)
-
-### Test Environment
-
-- Artifact names should include environment: `lambda-package-test`
+- Artifact names should be simple and consistent: `lambda-package`
 - Workflow triggers: `workflow_run` on `main` branch OR `push` to `main` branch
-- Use moderate retention for artifacts (3-7 days)
-
-### Prod Environment
-
-- Artifact names should include environment: `lambda-package-prod`
-- Workflow triggers: `workflow_run` after successful test workflow on `main` branch
-- Use longer retention for artifacts (7-30 days) or S3 storage
-- **CRITICAL**: Prod workflows should wait for dependency's prod workflow (same environment), not test workflow
+- Use appropriate retention for artifacts (1-7 days typically sufficient)
+- All workflows deploy to the same environment
 
 ---
 
 ## Best Practices
 
 1. **Always verify artifacts exist** before using them in deployment steps
-2. **Use environment-specific artifact naming** to avoid conflicts
+2. **Use consistent artifact naming** to avoid conflicts
 3. **Handle errors gracefully** with `continue-on-error` and verification steps
 4. **Document artifact paths** in workflow comments for maintainability
 5. **Use S3/Storage for multiple dependencies** to avoid complexity
-6. **Test artifact passing** in dev environment before deploying to prod
+6. **Test artifact passing** before deployment
 
 ---
 
@@ -197,38 +183,3 @@ Download artifacts from all upstream workflows and combine as needed for deploym
 
 See `workflow-common-issues.mdc` for more troubleshooting guidance.
 
----
-
-## Orchestrator Workflow Pattern (Always Used)
-
-**Always Used**: Orchestrator workflows are ALWAYS generated for ALL scenarios to maintain consistency and simplify dependency management.
-
-**Benefits**:
-
-- Simplified dependency management (dependencies managed in one place)
-- Clear execution order (topological sort ensures correct order)
-- Centralized error handling and reporting
-- Reusable code type workflows (can still be triggered independently)
-
-**Pattern**:
-
-1. **Generate Orchestrator Workflows** (one per environment):
-
-   - `orchestrator-dev.yml` - Orchestrates all code type workflows for dev
-   - `orchestrator-test.yml` - Orchestrates all code type workflows for test
-   - `orchestrator-prd.yml` - Orchestrates all code type workflows for prod
-
-2. **Orchestrator Structure**:
-
-   - Triggers on branch push (develop for dev, main for test/prd)
-   - Contains jobs that invoke code type workflows in dependency order
-   - Uses topological sort to determine execution order
-   - Handles artifact passing between workflows
-   - Provides centralized error handling
-
-3. **Code Type Workflows**:
-   - Support `workflow_call` trigger for orchestrator invocation (required for reusable workflows)
-   - Can still be triggered independently via push triggers
-   - Upload artifacts with consistent naming
-
-**See**: `orchestrator-workflow-patterns.mdc` for complete orchestrator patterns and implementation details.

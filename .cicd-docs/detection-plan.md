@@ -1,57 +1,62 @@
-# CI/CD Detection & Planning
-
-**Generated**: 2025-01-28T15:35:00Z
+# CI/CD Detection and Planning Document
 
 ## Phase 1: Detect & Plan
 
-### 1. Requirements Files Loaded
+### Step 1: Load Requirements Files for Dependency Analysis
 
-- ✅ `.code-docs/requirements/AWS-5_requirements.md`
-- ✅ `.code-docs/requirements/AWS-5-analysis.md`
-- ✅ `.code-docs/requirements/AWS-5-code-analysis.md`
-- ✅ `.code-docs/artifact-mappings.json`
+- [x] Scan for requirements files in `.code-docs/requirements/`
+- [x] Load `AWS-5_requirements.md`
+- [x] Load `artifact-mappings.json`
+- [x] Extract dependency information from artifact-mappings.json
 
-### 2. Detected Code Types
+**Dependencies Identified**:
+- Terraform depends on Python (Lambda package)
+- Artifact: `lambda_function.zip`
+- Source: `src/lambda-python-s3-lambda-trigger`
+- Destination: `iac/terraform/lambda_function.zip`
+- Artifact names by environment:
+  - Dev: `s3-lambda-trigger-package-dev`
+  - Test: `s3-lambda-trigger-package-test`
+  - Prod: `s3-lambda-trigger-package-prd`
 
-#### Python
-- **Location**: `src/lambda-python-s3-lambda-trigger/`
-- **Files**: 
-  - `lambda_handler.py`
-  - `requirements.txt`
-- **Tests**: `tests/s3-lambda-trigger/`
-- **Type**: Lambda function (Python 3.12)
+### Step 2: Scan Project Root and Subdirectories for Code Types
 
-#### Terraform
-- **Location**: `iac/terraform/`
-- **Files**:
-  - `versions.tf`
-  - `s3-lambda-trigger-main.tf`
-  - `s3-lambda-trigger-variables.tf`
-  - `s3-lambda-trigger-output.tf`
-  - `backend.tf`
-  - `terraform.tfvars.example`
-- **Type**: Infrastructure as Code
+- [x] **Python Detected**:
+  - Location: `src/lambda-python-s3-lambda-trigger/`
+  - Files: `lambda_handler.py`, `requirements.txt`
+  - Tests: `tests/s3-lambda-trigger/`
+  - Indicators: `.py` files, `requirements.txt`
 
-### 3. Existing Workflows Analysis
+- [x] **Terraform Detected**:
+  - Location: `iac/terraform/`
+  - Files: `s3-lambda-trigger-main.tf`, `s3-lambda-trigger-variables.tf`, `s3-lambda-trigger-output.tf`, `backend.tf`, `versions.tf`
+  - Indicators: `.tf` files, `terraform/` directory
 
-- **`.github/workflows/` directory**: Does not exist
-- **Existing workflows**: None found
-- **Action**: Create new workflows from scratch
+### Step 3: Analyze Existing Workflows
 
-### 4. Dependency Analysis
+- [x] Check `.github/workflows/` directory
+- [x] Directory does not exist (regenerated - clean start)
+- [x] No existing workflows to analyze
+- [x] Action: Create new workflows
 
-#### Artifact Mapping File Analysis
+### Step 4: Identify Detected Code Types
 
-**Source**: `.code-docs/artifact-mappings.json`
+**Summary**:
+- **Python**: Lambda function code in `src/lambda-python-s3-lambda-trigger/`
+- **Terraform**: Infrastructure code in `iac/terraform/`
 
-**Dependencies Detected**:
-- **Terraform depends on Python**: ✅ YES
-  - Terraform resource: `aws_lambda_function.hello_world`
-  - Terraform file: `iac/terraform/s3-lambda-trigger-main.tf`
-  - Artifact reference: `lambda_function.zip`
-  - Artifact path in Terraform: `iac/terraform/lambda_function.zip`
-  - Lambda function: `s3-lambda-trigger-hello-world`
-  - Source directory: `src/lambda-python-s3-lambda-trigger`
+**Cross-Reference with Requirements**:
+- ✅ Python Lambda function matches requirements (Python 3.12 runtime)
+- ✅ Terraform infrastructure matches requirements (S3 bucket, Lambda function, IAM roles)
+- ✅ Dependencies match artifact-mappings.json
+
+### Step 5: Analyze Code Dependencies
+
+- [x] Load artifact-mappings.json
+- [x] Extract dependency information:
+  - Terraform resource `aws_lambda_function.hello_world` depends on Lambda function `s3-lambda-trigger-hello-world`
+  - Terraform code references `var.lambda_zip_file` (default: `lambda_function.zip`)
+  - Terraform code uses `filename = var.lambda_zip_file` in `aws_lambda_function` resource
 
 **Dependency Map**:
 ```json
@@ -70,84 +75,49 @@
 }
 ```
 
-**Dependency Chain**:
-- `terraform → depends on → python`
-- Build order: Python first, then Terraform
+**Workflow Dependency Requirements**:
+- Python workflow must complete before Terraform workflow
+- Python workflow must upload Lambda package artifact
+- Terraform workflow must download Lambda package artifact
+- Artifact must be placed at `iac/terraform/lambda_function.zip`
 
-**Artifact Requirements**:
-- Python workflow must build and upload: `lambda_function.zip`
-- Artifact name pattern: `s3-lambda-trigger-package-{environment}`
-- Terraform workflow must download and place at: `iac/terraform/lambda_function.zip`
+### Step 6: Draft Single-Environment Workflow Plan
 
-### 5. Workflow Dependency Order
+**Planned Workflows** (9 total):
 
-**Execution Order** (topological sort):
-1. **Python** (no dependencies)
-2. **Terraform** (depends on Python)
+#### Orchestrator Workflows (3):
+- `orchestrator-dev.yml` - Orchestrates Python and Terraform for dev environment
+- `orchestrator-test.yml` - Orchestrates Python and Terraform for test environment
+- `orchestrator-prd.yml` - Orchestrates Python and Terraform for prod environment
 
-**Workflow Dependencies**:
-- `terraform-dev.yml` must wait for `python-dev.yml` to complete
-- `terraform-test.yml` must wait for `python-test.yml` to complete
-- `terraform-prd.yml` must wait for `python-prd.yml` to complete
+#### Python Workflows (3):
+- `python-dev.yml` - CI + Deploy to Dev (triggers on `develop` branch push)
+- `python-test.yml` - CI + Deploy to Test (triggers on `main` branch push)
+- `python-prd.yml` - CI + Deploy to Prod (triggers via workflow_run after test completion)
 
-### 6. Planned Workflows
+#### Terraform Workflows (3):
+- `terraform-dev.yml` - CI + Deploy to Dev (triggers on `develop` branch push OR via orchestrator)
+- `terraform-test.yml` - CI + Deploy to Test (triggers on `main` branch push OR via orchestrator)
+- `terraform-prd.yml` - CI + Deploy to Prod (triggers via workflow_run after test completion OR via orchestrator)
 
-#### Orchestrator Workflows (3 files)
-- `orchestrator-dev.yml` - Triggers on `develop` branch push
-- `orchestrator-test.yml` - Triggers on `main` branch push
-- `orchestrator-prd.yml` - Triggers via `workflow_run` after successful `orchestrator-test.yml`
-
-#### Python Workflows (3 files)
-- `python-dev.yml` - CI + Deploy to Dev (triggers on `develop` branch push OR via orchestrator)
-- `python-test.yml` - CI + Deploy to Test (triggers on `main` branch push OR via orchestrator)
-- `python-prd.yml` - CI + Deploy to Prod (triggers via `workflow_run` after `python-test.yml` OR via orchestrator)
-
-#### Terraform Workflows (3 files)
-- `terraform-dev.yml` - CI + Deploy to Dev (triggers on `develop` branch push OR via orchestrator, waits for Python)
-- `terraform-test.yml` - CI + Deploy to Test (triggers on `main` branch push OR via orchestrator, waits for Python)
-- `terraform-prd.yml` - CI + Deploy to Prod (triggers via `workflow_run` after `terraform-test.yml` OR via orchestrator, waits for Python)
-
-### 7. Artifact Passing Strategy
-
-**Python Workflows**:
-- Build Lambda package: `zip -r lambda_function.zip .`
-- Upload artifact with name: `s3-lambda-trigger-package-{environment}`
-- Artifact retention: 1 day
-
-**Terraform Workflows**:
-- Download artifact from Python workflow using `actions/download-artifact@v4`
+**Dependency Handling**:
+- Terraform workflows download Lambda package from Python workflows
 - Artifact name: `s3-lambda-trigger-package-{environment}`
-- Place artifact at: `iac/terraform/lambda_function.zip`
-- Verify artifact exists before Terraform operations
+- Artifact destination: `iac/terraform/lambda_function.zip`
+- Supports both `workflow_call` (orchestrator) and `workflow_run` triggers
 
-### 8. Workflow Triggers
+**Workflow Modifications**:
+- No existing workflows to modify (regenerated)
+- All workflows will be newly created
 
-**Dev Environment**:
-- Orchestrator: Push to `develop` branch
-- Python: Push to `develop` branch OR `workflow_call` (orchestrator)
-- Terraform: Push to `develop` branch OR `workflow_call` (orchestrator) OR `workflow_run` (wait for Python)
+### Step 7: User Plan Review Checkpoint
 
-**Test Environment**:
-- Orchestrator: Push to `main` branch
-- Python: Push to `main` branch OR `workflow_call` (orchestrator)
-- Terraform: Push to `main` branch OR `workflow_call` (orchestrator) OR `workflow_run` (wait for Python)
+- [x] Present summary to user
+- [x] Get user approval to proceed
 
-**Prod Environment**:
-- Orchestrator: `workflow_run` after successful `orchestrator-test.yml` on `main` branch
-- Python: `workflow_run` after successful `python-test.yml` on `main` branch OR `workflow_call` (orchestrator)
-- Terraform: `workflow_run` after successful `terraform-test.yml` on `main` branch OR `workflow_call` (orchestrator) OR `workflow_run` (wait for Python Prod)
+### Step 8: Persist Phase Results
 
-### 9. Summary
-
-**Total Workflows to Generate**: 9 files
-- 3 Orchestrator workflows (dev, test, prd)
-- 3 Python workflows (dev, test, prd)
-- 3 Terraform workflows (dev, test, prd)
-
-**Dependencies**: 
-- Terraform → Python (Lambda package required)
-
-**Artifact Handling**: 
-- Python builds and uploads Lambda zip
-- Terraform downloads and places Lambda zip before deployment
+- [ ] Update cicd-state.md with Phase 1 completion
+- [ ] Record user confirmation in audit.md
+- [ ] Mark Phase 1 complete
 

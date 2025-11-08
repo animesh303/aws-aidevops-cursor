@@ -86,26 +86,11 @@ alwaysApply: false
 - Single dependency patterns
 - Multiple dependency patterns
 - Artifact passing methods (5 methods)
-- Environment-specific considerations
-- Orchestrator workflow pattern (always used)
+- Single environment considerations
 - Best practices
 
 **Use When**: Implementing dependencies between code artifacts
 
-### `orchestrator-workflow-patterns.mdc`
-
-**Purpose**: Orchestrator workflow patterns (always used for consistency)  
-**Contains**:
-
-- Two-tier architecture (orchestrator + code type workflows)
-- Dependency resolution using topological sort
-- Orchestrator workflow structure and patterns
-- Code type workflow modifications for orchestrator compatibility
-- Environment-specific orchestrators (dev/test/prd)
-- Benefits of always using orchestrators
-- Implementation checklist
-
-**Use When**: Generating workflows (orchestrators are always generated for consistency)
 
 ### `error-handling.mdc`
 
@@ -206,14 +191,14 @@ alwaysApply: false
 ### During Workflow Generation
 
 - **Phase 1**: Follow `phase1-detect-plan.mdc`
-- **Phase 2**: Follow `phase2-generate-workflow.mdc`, reference `workflow-common-issues.mdc`, `workflow-dependency-handling.mdc`, and `orchestrator-workflow-patterns.mdc`
+- **Phase 2**: Follow `phase2-generate-workflow.mdc`, reference `workflow-common-issues.mdc`, `workflow-dependency-handling.mdc`
 - **Phase 3**: Follow `phase3-review-confirm.mdc`, use `validation-checklist.mdc`
 - **Phase 4**: Follow `phase4-commit-push.mdc`
 
 ### Troubleshooting
 
 - **Workflow errors**: See `workflow-common-issues.mdc`
-- **Dependency issues**: See `workflow-dependency-handling.mdc` and `orchestrator-workflow-patterns.mdc`
+- **Dependency issues**: See `workflow-dependency-handling.mdc`
 - **General errors**: See `error-handling.mdc`
 - **Need to rollback**: See `rollback-procedures.mdc`
 
@@ -241,7 +226,6 @@ alwaysApply: false
     ├── session-continuity.mdc         # Session management
     ├── workflow-common-issues.mdc    # Common issues
     ├── workflow-dependency-handling.mdc # Dependencies
-    ├── orchestrator-workflow-patterns.mdc # Orchestrator patterns
     ├── error-handling.mdc             # Error handling
     ├── rollback-procedures.mdc        # Rollback procedures
     ├── validation-checklist.mdc      # Validation checklist
@@ -265,12 +249,7 @@ alwaysApply: false
 
 ### `.github/workflows/` Directory
 
-- `orchestrator-dev.yml` - Orchestrator for dev environment (if dependencies exist)
-- `orchestrator-test.yml` - Orchestrator for test environment (if dependencies exist)
-- `orchestrator-prd.yml` - Orchestrator for prod environment (if dependencies exist)
-- `{code-type}-dev.yml` - Dev environment workflows
-- `{code-type}-test.yml` - Test environment workflows
-- `{code-type}-prd.yml` - Prod environment workflows
+- `{code-type}.yml` - One workflow per code type (single environment)
 
 ---
 

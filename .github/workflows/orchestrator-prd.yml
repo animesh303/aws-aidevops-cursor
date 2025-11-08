@@ -12,12 +12,14 @@ permissions:
   id-token: write
 
 jobs:
-  call-python-prd:
+  python:
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     uses: ./.github/workflows/python-prd.yml
+    secrets: inherit
 
-  call-terraform-prd:
+  terraform:
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
-    needs: [call-python-prd]
+    needs: [python]
     uses: ./.github/workflows/terraform-prd.yml
+    secrets: inherit
 

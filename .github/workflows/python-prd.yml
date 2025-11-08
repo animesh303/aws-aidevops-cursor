@@ -1,11 +1,12 @@
 name: Python Prod
 
 on:
-  workflow_call:
   workflow_run:
     workflows: ["Python Test"]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -13,7 +14,6 @@ permissions:
 
 jobs:
   python-lint:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     continue-on-error: true
     strategy:
@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -41,13 +41,12 @@ jobs:
           flake8 . || true
 
   python-security:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -66,16 +65,16 @@ jobs:
           bandit -r . || true
 
   python-tests:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     continue-on-error: true
+    if: ${{ hashFiles('tests/**') != '' }}
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v5
         with:
@@ -91,28 +90,28 @@ jobs:
         run: |
           pip install pytest pytest-cov
       - name: Run tests
-        if: ${{ hashFiles('tests/**') != '' }}
+        working-directory: src/lambda-python-s3-lambda-trigger
         run: |
           pytest tests/ --cov=. --cov-report=xml --cov-report=html || true
-      - name: Upload coverage reports
+      - name: Upload coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-reports-prd
+          name: coverage-${{ matrix.python-version }}
           path: |
             coverage.xml
             htmlcov/
-          retention-days: 7
+          retention-days: 1
 
   deploy-prod:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
     needs: [python-lint, python-security, python-tests]
     runs-on: ubuntu-latest
     environment: prod
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -121,11 +120,15 @@ jobs:
       - name: Build Lambda package
         working-directory: src/lambda-python-s3-lambda-trigger
         run: |
-          zip -r ../../lambda_function.zip . -x "*.git*" "*.md" "tests/*" "__pycache__/*" "*.pyc"
+          zip -r lambda_function.zip . -x "*.git*" "*.md" "tests/*"
       - name: Upload Lambda package artifact
         uses: actions/upload-artifact@v4
         with:
           name: s3-lambda-trigger-package-prd
-          path: lambda_function.zip
+          path: src/lambda-python-s3-lambda-trigger/lambda_function.zip
           retention-days: 1
+      - name: Deploy to production environment
+        run: |
+          echo "Lambda package built and ready for deployment"
+          echo "Package location: src/lambda-python-s3-lambda-trigger/lambda_function.zip"
 

@@ -1,25 +1,24 @@
 name: Terraform Prod
 
 on:
-  workflow_call:
   workflow_run:
     workflows: ["Terraform Test", "Python Prod"]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
   id-token: write
-  actions: read
 
 jobs:
   tf-validate:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -33,12 +32,14 @@ jobs:
         env:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
         run: |
-          cat > $HOME/.terraformrc << EOF
+          if [ -n "$TFC_TOKEN" ]; then
+            cat > $HOME/.terraformrc << EOF
           credentials "app.terraform.io" {
             token = "$TFC_TOKEN"
           }
           EOF
-      - name: Terraform Init
+          fi
+      - name: Terraform Init (no backend)
         working-directory: iac/terraform
         run: terraform init -backend=false
       - name: Terraform Validate
@@ -49,13 +50,12 @@ jobs:
         run: terraform fmt
 
   tf-plan:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     needs: [tf-validate]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -69,14 +69,13 @@ jobs:
         env:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
         run: |
-          cat > $HOME/.terraformrc << EOF
+          if [ -n "$TFC_TOKEN" ]; then
+            cat > $HOME/.terraformrc << EOF
           credentials "app.terraform.io" {
             token = "$TFC_TOKEN"
           }
           EOF
-      - name: Terraform Init
-        working-directory: iac/terraform
-        run: terraform init
+          fi
       - name: Detect Terraform Cloud backend
         id: detect-tfc
         working-directory: iac/terraform
@@ -88,6 +87,9 @@ jobs:
             echo "USE_TFC=false" >> $GITHUB_ENV
             echo "Standard backend detected"
           fi
+      - name: Terraform Init
+        working-directory: iac/terraform
+        run: terraform init
       - name: Terraform Plan
         working-directory: iac/terraform
         run: terraform plan -out=tfplan
@@ -100,20 +102,20 @@ jobs:
           retention-days: 1
 
   tf-security:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+      - name: Install Checkov
+        run: pip install checkov
       - name: Run Checkov
-        run: |
-          pip install checkov
-          checkov -d iac/terraform || true
+        working-directory: iac/terraform
+        run: checkov -d . || true
 
   deploy-prod:
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' || github.event_name == 'workflow_call' }}
     needs: [tf-validate, tf-plan, tf-security]
     runs-on: ubuntu-latest
     environment: prod
@@ -121,50 +123,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
-      - name: Find Python workflow run
-        if: github.event_name == 'workflow_call'
-        id: find-python-run
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const runs = await github.rest.actions.listWorkflowRuns({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'python-prd.yml',
-              branch: 'main',
-              status: 'success',
-              per_page: 1
-            });
-            if (runs.data.workflow_runs.length > 0) {
-              core.setOutput('run_id', runs.data.workflow_runs[0].id);
-            } else {
-              core.setFailed('No successful Python Prod workflow run found');
-            }
       - name: Download Lambda package from upstream workflow
         uses: actions/download-artifact@v4
         continue-on-error: true
         id: download-artifact
         with:
           name: s3-lambda-trigger-package-prd
-          run-id: ${{ github.event.workflow_run.id || steps.find-python-run.outputs.run_id }}
+          run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: ./lambda-package
       - name: Verify artifact downloaded successfully
         if: steps.download-artifact.outcome != 'success'
         run: |
           echo "Error: Failed to download artifact 's3-lambda-trigger-package-prd' from upstream workflow"
-          if [ -n "${{ github.event.workflow_run.id }}" ]; then
-            echo "Upstream workflow run ID: ${{ github.event.workflow_run.id }}"
-          elif [ -n "${{ steps.find-python-run.outputs.run_id }}" ]; then
-            echo "Python workflow run ID: ${{ steps.find-python-run.outputs.run_id }}"
-          fi
+          echo "Upstream workflow run ID: ${{ github.event.workflow_run.id }}"
           exit 1
       - name: Move Lambda package to Terraform directory
         run: |
           DEST_PATH="./iac/terraform/lambda_function.zip"
           mkdir -p $(dirname "$DEST_PATH")
-          cp ./lambda-package/lambda_function.zip "$DEST_PATH"
-          echo "TF_VAR_lambda_zip_file=$(pwd)/$DEST_PATH" >> $GITHUB_ENV
+          if [ -f ./lambda-package/lambda_function.zip ]; then
+            cp ./lambda-package/lambda_function.zip "$DEST_PATH"
+          elif [ -f ./lambda-package/s3-lambda-trigger-package-prd ]; then
+            cp ./lambda-package/s3-lambda-trigger-package-prd "$DEST_PATH"
+          else
+            echo "Error: Lambda package not found in downloaded artifacts"
+            ls -la ./lambda-package/ || echo "lambda-package directory not found"
+            exit 1
+          fi
+          echo "TF_VAR_lambda_package_path=$(pwd)/$DEST_PATH" >> $GITHUB_ENV
       - name: Verify Lambda package exists
         run: |
           TERRAFORM_LAMBDA_PATH="./iac/terraform/lambda_function.zip"
@@ -179,6 +166,10 @@ jobs:
           fi
           echo "✓ Lambda package verified at: $TERRAFORM_LAMBDA_PATH"
           ls -lh "$TERRAFORM_LAMBDA_PATH"
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ~1.1
       - name: Configure AWS credentials via OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -188,14 +179,13 @@ jobs:
         env:
           TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
         run: |
-          cat > $HOME/.terraformrc << EOF
+          if [ -n "$TFC_TOKEN" ]; then
+            cat > $HOME/.terraformrc << EOF
           credentials "app.terraform.io" {
             token = "$TFC_TOKEN"
           }
           EOF
-      - name: Terraform Init
-        working-directory: iac/terraform
-        run: terraform init
+          fi
       - name: Detect Terraform Cloud backend
         id: detect-tfc
         working-directory: iac/terraform
@@ -207,20 +197,22 @@ jobs:
             echo "USE_TFC=false" >> $GITHUB_ENV
             echo "Standard backend detected"
           fi
+      - name: Terraform Init
+        working-directory: iac/terraform
+        run: terraform init
       - name: Download Terraform Plan
         if: env.USE_TFC == 'false'
         uses: actions/download-artifact@v4
         with:
           name: terraform-plan-prd
-          path: iac/terraform
+          path: iac/terraform/
       - name: Terraform Apply
-        if: env.USE_TFC == 'false'
-        working-directory: iac/terraform
-        run: terraform apply -auto-approve tfplan
-      - name: Terraform Plan and Apply
-        if: env.USE_TFC == 'true'
         working-directory: iac/terraform
         run: |
-          terraform plan
-          terraform apply -auto-approve
+          if [ "$USE_TFC" = "true" ]; then
+            terraform plan
+            terraform apply -auto-approve
+          else
+            terraform apply tfplan
+          fi
 

@@ -10,10 +10,12 @@ permissions:
   id-token: write
 
 jobs:
-  call-python-dev:
+  python:
     uses: ./.github/workflows/python-dev.yml
+    secrets: inherit
 
-  call-terraform-dev:
-    needs: [call-python-dev]
+  terraform:
+    needs: [python]
     uses: ./.github/workflows/terraform-dev.yml
+    secrets: inherit
 

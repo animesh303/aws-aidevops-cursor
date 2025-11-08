@@ -10,10 +10,12 @@ permissions:
   id-token: write
 
 jobs:
-  call-python-test:
+  python:
     uses: ./.github/workflows/python-test.yml
+    secrets: inherit
 
-  call-terraform-test:
-    needs: [call-python-test]
+  terraform:
+    needs: [python]
     uses: ./.github/workflows/terraform-test.yml
+    secrets: inherit
 

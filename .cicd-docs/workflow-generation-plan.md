@@ -1,34 +1,63 @@
-# Workflow Generation Plan
+# CI/CD Workflow Generation Plan
 
-**Generated**: 2025-01-28T15:40:00Z
+## Phase 2: Generate Workflow Files
 
-## Execution Order
+### Step 1: Load Dependency Information
 
-Based on dependency analysis:
-1. **Python** (no dependencies)
-2. **Terraform** (depends on Python)
+- [x] Read dependency map from cicd-state.md
+- [x] Identify artifact requirements:
+  - Terraform depends on Python
+  - Artifact: `lambda_function.zip`
+  - Artifact names: `s3-lambda-trigger-package-{env}` (dev/test/prd)
 
-## Workflows to Generate
+### Step 2: Verify Clean State
 
-### Orchestrator Workflows (3 files)
-- [x] orchestrator-dev.yml
-- [x] orchestrator-test.yml
-- [x] orchestrator-prd.yml
+- [x] `.github/workflows/` directory does not exist (regenerated)
+- [x] No existing workflows to manage
+- [x] Will create 9 new workflow files
 
-### Python Workflows (3 files)
-- [x] python-dev.yml
-- [x] python-test.yml
-- [x] python-prd.yml
+### Step 3: Read Language-Specific Standards
 
-### Terraform Workflows (3 files)
-- [x] terraform-dev.yml
-- [x] terraform-test.yml
-- [x] terraform-prd.yml
+- [x] Read `python-standards.mdc`
+- [x] Read `terraform-standards.mdc`
 
-## Dependency Handling
+### Step 4: Generate Orchestrator Workflows
 
-**Terraform → Python**:
-- Python builds: `s3-lambda-trigger-package-{environment}`
-- Terraform downloads: `s3-lambda-trigger-package-{environment}`
-- Terraform places at: `iac/terraform/lambda_function.zip`
+- [x] Generate `orchestrator-dev.yml`
+- [x] Generate `orchestrator-test.yml`
+- [x] Generate `orchestrator-prd.yml`
+
+### Step 5: Generate Python Workflows
+
+- [x] Generate `python-dev.yml` (CI + Deploy to Dev)
+- [x] Generate `python-test.yml` (CI + Deploy to Test)
+- [x] Generate `python-prd.yml` (CI + Deploy to Prod)
+
+### Step 6: Generate Terraform Workflows
+
+- [x] Generate `terraform-dev.yml` (CI + Deploy to Dev with dependency handling)
+- [x] Generate `terraform-test.yml` (CI + Deploy to Test with dependency handling)
+- [x] Generate `terraform-prd.yml` (CI + Deploy to Prod with dependency handling)
+
+### Step 7: Validate Workflow Linting
+
+- [x] Validate YAML syntax for all workflows
+- [x] Verify GitHub Actions expression syntax
+- [x] Check for missing required fields
+- [x] Verify job dependencies
+- [x] Validate workflow triggers
+- [x] Check environment names
+- [x] Verify artifact paths and names
+- [x] Validate dependency handling steps in Terraform workflows
+
+### Step 8: Present Workflow Preview
+
+- [x] Show summarized YAML for all workflows
+- [x] Highlight dependency handling
+- [x] Show dependency graph
+- [x] Confirm linting validation
+
+### Step 9: User Checkpoint
+
+- [x] Get user approval to proceed
 
