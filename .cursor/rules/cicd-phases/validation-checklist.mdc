@@ -16,8 +16,10 @@ alwaysApply: false
 
 - [ ] All expressions use `${{ }}` syntax
 - [ ] No missing expression wrappers
-- [ ] `hashFiles()` used only in step-level `if` conditions
+- [ ] **CRITICAL**: `hashFiles()` used ONLY in step-level `if` conditions (NOT at job level)
+- [ ] **MANDATORY CHECK**: Scanned workflow file for job-level `if:` fields containing `hashFiles` - NONE found
 - [ ] All GitHub Actions functions properly wrapped
+- [ ] **Validation Method**: Read workflow YAML, parse structure, verify no `jobs.<job>.if` contains `hashFiles`
 
 ### Workflow Structure Validation
 

@@ -51,19 +51,45 @@ Define CI/CD workflow patterns and standards for Python code in single productio
 - **Condition**: Only run if `tests/` directory exists
 - **Matrix**: Python versions (3.10, 3.11, 3.12)
 - **Continue on Error**: `continue-on-error: true` (job level) - allows workflow to continue even if tests fail
+- **CRITICAL - hashFiles() Usage**:
+  - **DO NOT** use `hashFiles()` at job level (`jobs.<job>.if`) - this is INVALID
+  - **MUST** use `hashFiles()` at step level (`jobs.<job>.steps[*].if`) only
+  - Apply condition to test-related steps (install test dependencies, run tests)
 - **Steps**:
   - Setup Python with matrix version
   - Cache pip dependencies
   - Install dependencies including test requirements
-  - Run pytest with coverage:
+  - Install test dependencies (with step-level condition):
+    ```yaml
+    - name: Install test dependencies
+      if: ${{ hashFiles('tests/**') != '' }}
+      run: |
+        pip install pytest pytest-cov
+    ```
+  - Run pytest with coverage (with step-level condition):
     ```yaml
     - name: Run tests
+      if: ${{ hashFiles('tests/**') != '' }}
       run: |
         pytest tests/ --cov=. --cov-report=xml --cov-report=html || true  # Continue even if tests fail
     ```
   - Upload coverage artifacts (coverage.xml, htmlcov/) - use `if: always()` to upload even if tests fail
 
 ## Build Job
+
+**CRITICAL - Job Structure Decision**: When Terraform depends on Python Lambda artifacts, choose ONE of these patterns:
+
+### Option 1: MOST PREFERRED - Combined Build and Deploy Job
+
+**For tightly coupled dependencies where Terraform manages Lambda and no separate Python deploy is needed:**
+
+- **No separate `python-build` job needed**
+- Python build steps are included in `terraform-deploy` job
+- Build happens in same runner as Terraform deploy
+- **Benefits**: No artifact passing needed, simplest workflow, fewer jobs
+- **See**: `workflow-dependency-handling.mdc` for complete combined job pattern
+
+### Option 2: Separate Build Job
 
 - **Name**: `python-build`
 - **Needs**: All CI jobs (`python-lint`, `python-security`, `python-test`)
@@ -82,6 +108,7 @@ Define CI/CD workflow patterns and standards for Python code in single productio
       ```
       - **Benefits**: Terraform deploys Lambda source directly, no artifact upload/download needed, simpler workflow
       - **Note**: Terraform's `source_code_hash` attribute automatically detects changes and updates Lambda function code
+      - **Note**: This still requires artifact passing between jobs. For simplest solution, use Option 1 (Combined Job)
     - **ALTERNATIVE - Artifact Upload**: If local build placement is not feasible (e.g., multiple consumers), use artifact upload:
       ```yaml
       - name: Build Lambda package

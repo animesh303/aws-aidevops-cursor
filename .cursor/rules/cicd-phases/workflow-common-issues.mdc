@@ -2,6 +2,50 @@
 description: Troubleshooting guidance for resolving common issues in GitHub Actions workflow generation.
 alwaysApply: false
 ---
+
+## Issue 1: hashFiles() Used at Job Level (CRITICAL ERROR)
+
+**Problem**: `hashFiles()` function is used at job level (`jobs.<job>.if`), which is NOT supported by GitHub Actions.
+
+**Error Example**:
+
+```yaml
+jobs:
+  python-test:
+    if: ${{ hashFiles('tests/**') != '' }} # ❌ ERROR: hashFiles() not available at job level
+    runs-on: ubuntu-latest
+    steps:
+      - run: pytest
+```
+
+**Error Message**: `Unrecognized function: 'hashFiles'. Located at position 1 within expression: hashFiles('tests/**') != ''`
+
+**Solution**: Move `hashFiles()` condition to step level:
+
+```yaml
+jobs:
+  python-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install test dependencies
+        if: ${{ hashFiles('tests/**') != '' }} # ✓ Correct - hashFiles at step level
+        run: pip install pytest
+      - name: Run tests
+        if: ${{ hashFiles('tests/**') != '' }} # ✓ Correct - hashFiles at step level
+        run: pytest tests/
+```
+
+**Key Points**:
+
+- `hashFiles()` is ONLY available in step-level `if` conditions (`jobs.<job>.steps[*].if`)
+- `hashFiles()` is NOT available at job level (`jobs.<job>.if`)
+- Always apply conditions to individual steps, not the entire job
+
+**Validation**: Always scan generated workflows for job-level `if:` fields containing `hashFiles` before proceeding.
+
+---
+
 ## Issue 2: Missing `${{ }}` Wrapper for GitHub Actions Functions
 
 **Problem**: GitHub Actions functions like `hashFiles()`, `always()`, `success()` must be wrapped in `${{ }}` syntax.

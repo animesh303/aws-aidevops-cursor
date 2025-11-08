@@ -313,9 +313,21 @@ If you need to conditionally run an entire job based on file existence, either:
    - For each detected code type, read and apply the complete content from `{code-type}-standards.mdc`
    - Use the exact job names, steps, and patterns specified in the standards file
    - Do not modify or summarize the standards - use them as written
-   - **CRITICAL - For Terraform Workflows**:
+   - **CRITICAL - For Terraform Workflows with Dependencies**:
      - **MANDATORY Dependency Check**: Before generating deployment job, check if Terraform has dependencies
-     - If dependencies exist, deployment job MUST include dependency handling steps from `terraform-standards.mdc`
+     - **MOST PREFERRED - Combined Job Pattern**: If Terraform depends on Python Lambda and Terraform manages the Lambda function:
+       - **DO NOT** create separate `python-build` job
+       - **DO** combine Python build steps and Terraform deploy steps in a single `terraform-deploy` job
+       - Job waits for both Python CI jobs AND Terraform CI jobs
+       - Python build steps create artifact directly where Terraform expects it (same runner)
+       - Terraform deploy steps use artifact from same runner (no download needed)
+       - **Benefits**: No artifact passing needed, simplest workflow, fewer jobs
+       - **See**: `workflow-dependency-handling.mdc` for complete combined job pattern
+     - **ALTERNATIVE - Separate Jobs**: If combined job is not feasible (e.g., build used by multiple consumers):
+       - Create separate `python-build` job
+       - Create `terraform-deploy` job that waits for `python-build`
+       - Include dependency handling steps from `terraform-standards.mdc`
+       - Use artifact upload/download or local build placement pattern
    - If a standards file is missing, create it with appropriate CI/CD patterns for that code type
 
 8. **Document Dependency Handling:**
@@ -343,9 +355,31 @@ If you need to conditionally run an entire job based on file existence, either:
        - **If dependencies detected**: Verify deploy job includes ALL mandatory dependency handling steps AND has correct `needs:` dependencies
        - **If dependencies detected but steps missing**: Add missing steps immediately - DO NOT proceed without them
        - **Verify job dependencies**: Ensure `needs:` includes upstream deploy jobs (e.g., `terraform-deploy` needs `python-deploy`)
+   - **MANDATORY - Pre-Validation Check**: Before generating workflow, ensure standards files do NOT use `hashFiles()` at job level
+     - Check `python-standards.mdc` and other standards files for job-level `hashFiles()` usage
+     - If found in standards, fix the standards file first
+   - **MANDATORY - Post-Generation Validation (BLOCKING)**: After generating workflow file, perform these checks:
+     - **STEP 1**: Read the generated workflow file (e.g., `.github/workflows/ci-cd.yml`)
+     - **STEP 2**: Use grep or pattern matching to find all job definitions: `grep -E "^\s+[a-z-]+:\s*$" .github/workflows/ci-cd.yml`
+     - **STEP 3**: For each job, check the next few lines for `if:` at same indentation as `runs-on:`
+     - **STEP 4**: Pattern to detect: Job name line followed by `if:` line containing `hashFiles`
+     - **STEP 5**: If detected, this is a CRITICAL BLOCKING ERROR
+     - **STEP 6**: Fix by:
+       - Remove job-level `if:` line
+       - Add step-level `if: ${{ hashFiles('tests/**') != '' }}` to relevant steps (install test deps, run tests)
+     - **STEP 7**: Re-read workflow file and verify fix
+     - **STEP 8**: DO NOT proceed to preview until this validation passes
+     - **Example detection pattern**:
+       ```bash
+       # Check for job-level if with hashFiles
+       grep -A 2 "^\s\+[a-z-]*:\s*$" .github/workflows/ci-cd.yml | grep -B 1 "if:.*hashFiles"
+       ```
+     - **If found**: This is a BLOCKING ERROR - fix immediately
    - **If linting errors are found**: Fix them immediately before proceeding
    - **If dependency handling steps are missing**: Add them immediately before proceeding
    - **DO NOT proceed to preview if workflows have linting errors OR missing dependency handling steps**
+   - **CRITICAL**: Job-level `hashFiles()` usage is a BLOCKING error - workflow will fail GitHub Actions validation
+   - **ENFORCEMENT**: This validation MUST be performed after every workflow generation - no exceptions
 
 10. **Present Workflow YAML Preview:**
 

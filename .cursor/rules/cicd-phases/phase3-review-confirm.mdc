@@ -87,11 +87,19 @@ Provide the user with final review of the generated/updated single production CI
 5. **Validate Workflow Linting:**
 
    - **CRITICAL**: Verify all generated workflow files have no linting errors
+   - **MANDATORY - BLOCKING CHECK: hashFiles() at Job Level**:
+     - Read the generated workflow file
+     - Search for job-level `if:` fields (same indentation as `runs-on:`)
+     - If any job-level `if:` contains `hashFiles`, this is a BLOCKING ERROR
+     - Fix immediately by moving condition to step level
+     - Re-validate after fix
+     - DO NOT proceed to Phase 4 until this is fixed
    - Check YAML syntax validity
    - Verify all GitHub Actions expressions use correct `${{ }}` syntax
    - Verify no missing required fields
    - Check for valid job dependencies and workflow triggers
    - **If linting errors are found**: Fix them immediately before proceeding to Phase 4
+   - **CRITICAL**: Job-level `hashFiles()` will cause workflow validation failure - must be fixed
    - Report any linting errors found and confirm they are resolved
 
 6. **User Confirmation:**

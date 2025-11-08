@@ -102,6 +102,30 @@ Define CI/CD workflow patterns and standards for Terraform code in single produc
 
 ### Deploy Job (in unified workflow `ci-cd.yml`)
 
+**CRITICAL - Job Structure Decision**: When Terraform depends on Python Lambda artifacts, choose ONE of these patterns:
+
+#### Option 1: MOST PREFERRED - Combined Build and Deploy Job
+
+**For tightly coupled dependencies where Terraform manages Lambda and no separate Python deploy is needed:**
+
+- **Name**: `terraform-deploy` (combines Python build + Terraform deploy)
+- **Needs**: 
+  - Python CI jobs: `[python-lint, python-security, python-test]`
+  - Terraform CI jobs: `[terraform-lint, terraform-security, terraform-validate]`
+  - Example: `needs: [python-lint, python-security, python-test, terraform-security, terraform-validate]`
+- **Environment**: `production`
+- **Steps**: 
+  1. Checkout code
+  2. **Python Build Steps**: Set up Python, install dependencies, build Lambda package directly in `iac/terraform/lambda_function.zip`
+  3. **Terraform Deploy Steps**: Verify artifact exists, configure Terraform, init/plan/apply
+- **Benefits**: 
+  - No artifact passing needed (same runner)
+  - Simplest workflow (fewer jobs)
+  - No upload/download overhead
+- **See**: `workflow-dependency-handling.mdc` for complete combined job pattern
+
+#### Option 2: Separate Jobs with Local Build Placement
+
 - **Name**: `terraform-deploy`
 - **Needs**:
   - All CI jobs: `[terraform-lint, terraform-security, terraform-validate]`
@@ -110,12 +134,26 @@ Define CI/CD workflow patterns and standards for Terraform code in single produc
     - Wait for upstream **build jobs** that produce artifacts (e.g., `python-build` for Lambda package)
     - Example: `needs: [terraform-lint, terraform-security, terraform-validate, python-build]`
     - **DO NOT** wait for upstream deploy jobs for artifact dependencies
-- **Environment**: `default` (or custom environment name)
+- **Environment**: `production`
 - **MANDATORY Dependency Detection**:
   - **If Terraform code references artifacts** (e.g., `filename = "lambda_function.zip"` in any `.tf` file), Terraform HAS dependencies
-  - **Dependency handling steps below are MANDATORY** - DO NOT SKIP
+  - **Decision Point**: Choose Option 1 (Combined Job) if Terraform manages Lambda and no separate Python deploy needed
+  - **If Option 2 (Separate Jobs)**: Dependency handling steps below are MANDATORY - DO NOT SKIP
   - These steps ensure artifacts are available when Terraform runs
-- **Steps** (CRITICAL ORDER - ALL STEPS MANDATORY IF DEPENDENCIES DETECTED):
+
+**For Option 1 (Combined Job) - Steps**:
+  1. Checkout code
+  2. **Python Build Steps** (build artifact where Terraform expects it):
+     - Set up Python
+     - Install dependencies
+     - Build Lambda package in `iac/terraform/lambda_function.zip`
+  3. **Terraform Deploy Steps** (use artifact from same runner):
+     - Verify artifact exists
+     - Configure AWS credentials
+     - Configure Terraform Cloud (if applicable)
+     - Terraform init/plan/apply
+
+**For Option 2 (Separate Jobs) - Steps** (CRITICAL ORDER - ALL STEPS MANDATORY IF DEPENDENCIES DETECTED):
 
   1. **CRITICAL - Checkout code**: Standard checkout (unified workflow uses push trigger):
      ```yaml

@@ -20,9 +20,125 @@ alwaysApply: false
 
 **When Code Type A needs an artifact from Code Type B** (e.g., Terraform needs Python Lambda package):
 
-### PREFERRED Method: Local Build Placement
+### MOST PREFERRED Method: Combined Build and Deploy Job
 
-**For Lambda functions and similar artifacts, the PREFERRED approach is to build artifacts directly where Terraform expects them:**
+**For tightly coupled dependencies where Terraform manages the Lambda function, combine Python build and Terraform deploy in a single job:**
+
+#### Combined Job Pattern
+
+- **When to Use**:
+
+  - Terraform manages the Lambda function (creates and deploys it)
+  - Python build artifact is ONLY needed by Terraform
+  - No separate Python deploy job is needed
+  - This eliminates artifact passing entirely since both run in the same runner
+
+- **Benefits**:
+
+  - **No artifact passing needed**: Build and deploy happen in same runner environment
+  - **Simplest workflow**: Fewer jobs, fewer dependencies, no upload/download steps
+  - **No path issues**: Artifact is built exactly where Terraform expects it
+  - **Faster execution**: No artifact upload/download overhead
+
+- **Job Structure**:
+
+  ```yaml
+  terraform-deploy:
+    name: Build Lambda and Deploy Terraform
+    needs:
+      [
+        python-lint,
+        python-security,
+        python-test,
+        terraform-security,
+        terraform-validate,
+      ]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      # Python Build Steps (build artifact where Terraform expects it)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install Python dependencies
+        working-directory: src/lambda-python-{feature-name}
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Build Lambda package for Terraform
+        run: |
+          mkdir -p ./iac/terraform
+          cd src/lambda-python-{feature-name}
+          zip -r ../../iac/terraform/lambda_function.zip . -x "*.git*" "*.md" "tests/*" "*.tf*" "iac/**"
+          cd ../..
+          echo "✓ Lambda package built at: ./iac/terraform/lambda_function.zip"
+          ls -lh ./iac/terraform/lambda_function.zip
+
+      # Terraform Deploy Steps (use artifact built above)
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ~1.1
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Configure Terraform Cloud
+        working-directory: iac/terraform
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+        run: |
+          if [ -n "$TFC_TOKEN" ]; then
+            cat > $HOME/.terraformrc << EOF
+          credentials "app.terraform.io" {
+            token = "$TFC_TOKEN"
+          }
+          EOF
+          fi
+      - name: Verify Lambda package exists
+        run: |
+          TERRAFORM_LAMBDA_PATH="./iac/terraform/lambda_function.zip"
+          if [ ! -f "$TERRAFORM_LAMBDA_PATH" ]; then
+            echo "Error: Lambda package not found at: $TERRAFORM_LAMBDA_PATH"
+            exit 1
+          fi
+          echo "✓ Lambda package verified at: $TERRAFORM_LAMBDA_PATH"
+          ls -lh "$TERRAFORM_LAMBDA_PATH"
+      - name: Terraform Init
+        working-directory: iac/terraform
+        run: terraform init
+      - name: Terraform Plan
+        id: terraform-plan
+        working-directory: iac/terraform
+        run: terraform plan -out=tfplan
+        continue-on-error: true
+      - name: Terraform Apply
+        working-directory: iac/terraform
+        run: |
+          if [ "${{ steps.terraform-plan.outcome }}" == "success" ]; then
+            terraform apply tfplan
+          else
+            terraform apply -auto-approve
+          fi
+  ```
+
+- **Key Points**:
+  - Single job combines Python build and Terraform deploy
+  - Job waits for both Python CI jobs AND Terraform CI jobs
+  - Build step creates artifact directly where Terraform expects it
+  - Deploy step uses artifact from same runner (no download needed)
+  - No separate `python-build` job needed
+  - No artifact upload/download steps needed
+
+### PREFERRED Method: Local Build Placement (Separate Jobs)
+
+**For Lambda functions and similar artifacts, build artifacts directly where Terraform expects them. Use this when you need separate jobs (e.g., for parallelization or when build is used by multiple consumers):**
 
 #### Upstream Job (Code Type B - Python Build)
 
@@ -53,12 +169,13 @@ alwaysApply: false
           ls -lh ./iac/terraform/lambda_function.zip
   ```
 
-**Benefits of Local Build Placement:**
+**Benefits of Local Build Placement (Separate Jobs):**
 
 - **Simpler workflow**: No artifact upload/download steps needed
 - **Terraform deploys source directly**: Terraform's `source_code_hash` automatically detects changes and updates Lambda function code
 - **Fewer path issues**: Artifact is already where Terraform expects it
 - **No separate deploy job needed**: When Terraform manages Lambda, no separate `python-deploy` job is needed
+- **Note**: This still requires artifact passing between jobs (via checkout or artifacts). For simplest solution, use Combined Build and Deploy Job pattern above.
 
 #### Downstream Job (Code Type A - Terraform Deploy)
 
