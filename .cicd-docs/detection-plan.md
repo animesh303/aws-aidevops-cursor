@@ -1,192 +1,138 @@
-# CI/CD Detection & Planning Document
+# Phase 1: Detection & Planning
 
-**Created**: 2025-11-08T22:40:00Z
-**Phase**: Phase 1 - Detect & Plan
+## Steps
 
-## Step 1: Load Requirements Files for Dependency Analysis
+- [x] Load Requirements Files for Dependency Analysis
+- [x] Scan Project Root and Subdirectories for Code Types
+- [x] Analyze Existing Workflows
+- [x] Identify Detected Code Types
+- [x] Analyze Code Dependencies
+- [x] Draft Single Production Workflow Plan
+- [x] User Plan Review Checkpoint
+- [x] Persist Phase Results (State & Audit)
 
-- [x] Scan for requirements files
-- [x] Extract dependency information
-- [x] Document dependencies
+## Detection Results
 
 ### Requirements Files Loaded
 
 - `.code-docs/requirements/AWS-5_requirements.md` - Technical requirements specification
 - `.code-docs/requirements/AWS-5-analysis.md` - Requirements analysis
 - `.code-docs/requirements/AWS-5-code-analysis.md` - Code analysis
-
-### Artifact Mapping File Loaded
-
 - `.code-docs/artifact-mappings.json` - Artifact dependency mappings
-
-### Dependency Information Extracted
-
-From artifact-mappings.json:
-- **Terraform Resource**: `aws_lambda_function.hello_world`
-- **Lambda Function**: `s3-lambda-trigger-hello-world`
-- **Artifact Name**: `s3-lambda-trigger-package-dev`
-- **Artifact Source Path**: `src/lambda-python-s3-lambda-trigger`
-- **Artifact Destination Path**: `iac/terraform/lambda_function.zip`
-- **Dependency**: Terraform depends on Python Lambda package
-
-## Step 2: Scan Project for Code Types
-
-- [x] Scan for Python code
-- [x] Scan for Terraform code
-- [x] Scan for JavaScript/TypeScript code
-- [x] Scan for Java code
-- [x] Scan for Go code
-- [x] Scan for Docker files
-- [x] Scan for Kubernetes manifests
-- [x] Scan for CloudFormation templates
-- [x] Scan for CDK code
 
 ### Detected Code Types
 
-#### Python
-- **Location**: `src/lambda-python-s3-lambda-trigger/`
-- **Files**: 
-  - `lambda_handler.py`
-  - `requirements.txt`
-- **Tests**: `tests/s3-lambda-trigger/`
-  - `test_lambda_handler.py`
-  - `__init__.py`
+1. **Python**
+   - Location: `src/lambda-python-s3-lambda-trigger/`
+   - Test Location: `tests/s3-lambda-trigger/`
+   - Files: `lambda_handler.py`, `requirements.txt`
+   - Runtime: Python 3.12
+   - Lambda Function: `s3-lambda-trigger-hello-world`
 
-#### Terraform
-- **Location**: `iac/terraform/`
-- **Files**:
-  - `backend.tf`
-  - `s3-lambda-trigger-main.tf`
-  - `s3-lambda-trigger-output.tf`
-  - `s3-lambda-trigger-variables.tf`
-  - `terraform.tfvars.example`
-  - `versions.tf`
+2. **Terraform**
+   - Location: `iac/terraform/`
+   - Files: `s3-lambda-trigger-main.tf`, `s3-lambda-trigger-variables.tf`, `s3-lambda-trigger-output.tf`, `backend.tf`, `versions.tf`
+   - Resources: S3 bucket, Lambda function, IAM roles, CloudWatch log group
 
-#### Other Code Types
-- **JavaScript/TypeScript**: Not detected
-- **Java**: Not detected
-- **Go**: Not detected
-- **Docker**: Not detected
-- **Kubernetes**: Not detected
-- **CloudFormation**: Not detected
-- **CDK**: Not detected
+### Existing Workflows
 
-## Step 3: Analyze Existing Workflows
-
-- [x] Check for existing workflows directory
-- [x] Document existing workflow patterns
-
-### Existing Workflows Analysis
-
-- **`.github/workflows/` directory**: Does not exist (deleted during regeneration)
+- **`.github/workflows/` directory**: Does not exist (regenerated)
 - **Existing workflows**: None
 - **Action**: Create new single production workflow
 
-## Step 4: Identify Detected Code Types
+### Dependency Analysis
 
-- [x] Create summary of detected code types
-- [x] Cross-reference with requirements
-- [x] Validate dependencies
+#### Artifact Dependency (from artifact-mappings.json)
 
-### Summary
+- **Terraform → depends on → Python** (artifact dependency)
+  - Terraform resource `aws_lambda_function.hello_world` needs artifact `lambda_function.zip`
+  - Artifact source: `src/lambda-python-s3-lambda-trigger`
+  - Artifact destination: `iac/terraform/lambda_function.zip`
+  - Artifact name: `s3-lambda-trigger-package-dev`
+  - Job dependency: `terraform-deploy` needs `python-build`
 
-**Detected Code Types**:
-1. **Python** - Lambda function code in `src/lambda-python-s3-lambda-trigger/`
-2. **Terraform** - Infrastructure code in `iac/terraform/`
+#### Infrastructure Dependency (from code analysis)
 
-**Requirements Cross-Reference**:
-- ✅ Python Lambda function matches requirements (Python 3.12 runtime, 128 MB memory)
-- ✅ Terraform infrastructure matches requirements (IaC tool specified)
-- ✅ Dependencies validated: Terraform depends on Python Lambda package
+- **Python deploy → depends on → Terraform deploy** (infrastructure dependency)
+  - Python deploy needs Lambda function to exist (created by Terraform deploy)
+  - Terraform creates `aws_lambda_function.hello_world` resource
+  - Job dependency: `python-deploy` needs `terraform-deploy`
 
-## Step 5: Analyze Code Dependencies
-
-- [x] Load artifact mapping file
-- [x] Build dependency map
-- [x] Document workflow dependency requirements
-
-### Dependency Map
+#### Dependency Map
 
 ```json
 [
   {
     "code_type": "terraform",
     "depends_on": "python",
+    "dependency_type": "artifact",
     "artifacts": ["lambda_function.zip"],
-    "artifact_name": "lambda-package",
+    "artifact_name": "s3-lambda-trigger-package-dev",
     "artifact_source_path": "src/lambda-python-s3-lambda-trigger",
     "artifact_destination_path": "iac/terraform/lambda_function.zip"
+  },
+  {
+    "code_type": "python",
+    "depends_on": "terraform",
+    "dependency_type": "infrastructure",
+    "description": "Python deploy needs Terraform to create Lambda function first"
   }
 ]
 ```
 
-**Dependency Chain**: `terraform → depends on → python`
+**Dependency Chains**: 
+- `terraform → depends on → python` (artifact dependency)
+- `python-deploy → depends on → terraform-deploy` (infrastructure dependency)
 
 **Execution Order**:
-1. Python (no dependencies)
-2. Terraform (depends on Python)
 
-### Workflow Dependency Requirements
+1. Python CI jobs (lint, security, tests) - parallel
+2. Python build - after CI jobs
+3. Terraform CI jobs (security, validate) - parallel
+4. Terraform deploy - after Terraform CI jobs AND Python build
+5. Python deploy - after Python build AND Terraform deploy
 
-- **Python Build Job**: Must produce `lambda-package` artifact (zip file)
-- **Terraform Deploy Job**: Must wait for Python deploy job to complete
-- **Artifact Passing**: Terraform deploy job downloads `lambda-package` artifact and moves it to `iac/terraform/lambda_function.zip`
-
-## Step 6: Draft Single Production Workflow Plan
-
-- [x] Plan unified production workflow
-- [x] Document dependency handling
-- [x] Document workflow modifications
-
-### Unified Production Workflow Plan
+### Single Production Workflow Plan
 
 **Workflow File**: `.github/workflows/ci-cd.yml`
 
-**Trigger**:
+**Trigger**: 
 - Pushes to `main` branch
-- `workflow_dispatch` for manual trigger
+- `workflow_dispatch` for manual execution
 
-**Environment**: Single production environment only
+**Environment**: Single production environment (all deploy jobs use `environment: production`)
 
-**Workflow Structure**:
+**Job Structure**:
 
-#### Python Jobs
-1. **python-lint** - Lint Python code (runs in parallel)
-2. **python-security** - Security scan with Bandit (runs in parallel)
-3. **python-tests** - Run unit tests (runs in parallel)
-4. **python-build** - Build Lambda package zip file (depends on: lint, security, tests)
-5. **python-deploy** - Deploy Lambda function to AWS (depends on: build, uses `environment: production`)
+1. **Python CI Jobs** (run in parallel):
+   - `python-lint`: Lint Python code
+   - `python-security`: Security scanning
+   - `python-test`: Run unit tests
 
-#### Terraform Jobs
-1. **terraform-security** - Security scan with Checkov (runs in parallel)
-2. **terraform-validate** - Validate Terraform configuration (runs in parallel)
-3. **terraform-deploy** - Deploy infrastructure (depends on: terraform-security, terraform-validate, python-deploy, uses `environment: production`)
+2. **Python Build Job**:
+   - `python-build`: Build Lambda package (creates `lambda_function.zip`)
+   - Uploads artifact: `s3-lambda-trigger-package-dev`
 
-**Dependency Handling**:
-- Terraform deploy job waits for Python deploy job to complete
-- Terraform deploy job downloads `lambda-package` artifact from Python build job
-- Artifact is moved to `iac/terraform/lambda_function.zip` for Terraform to use
+3. **Terraform CI Jobs** (run in parallel):
+   - `terraform-security`: Security scanning
+   - `terraform-validate`: Validate Terraform code
 
-**Execution Order**:
-1. Python CI jobs (lint, security, tests) - run in parallel
-2. Python build job - runs after CI jobs
-3. Python deploy job - runs after build
-4. Terraform CI jobs (security, validate) - run in parallel (can start early)
-5. Terraform deploy job - runs after Terraform CI jobs AND Python deploy job
+4. **Terraform Deploy Job**:
+   - `terraform-deploy`: Deploy infrastructure
+   - Depends on: `python-build` (needs Lambda zip artifact)
+   - Downloads artifact: `s3-lambda-trigger-package-dev`
+   - Places artifact at: `iac/terraform/lambda_function.zip`
 
-### Workflow Modifications
+5. **Python Deploy Job**:
+   - `python-deploy`: Update Lambda function code
+   - Depends on: `python-build` AND `terraform-deploy` (needs Lambda function to exist)
+   - Downloads artifact: `s3-lambda-trigger-package-dev`
 
-- **New Workflow**: Create `.github/workflows/ci-cd.yml` (single unified production workflow)
-- **Existing Workflows**: None (directory was deleted during regeneration)
+**Artifact Passing Strategy**:
+- Python build creates `lambda_function.zip` and uploads as GitHub Actions artifact
+- Terraform deploy downloads artifact and places it in `iac/terraform/` directory
+- Python deploy downloads artifact for function code updates
 
-## Step 7: User Plan Review Checkpoint
-
-- [ ] Present summary to user
-- [ ] Wait for user confirmation
-
-## Step 8: Persist Phase Results
-
-- [ ] Update cicd-state.md
-- [ ] Record user confirmation in audit.md
-- [ ] Mark plan checkboxes complete
-
+**Infrastructure Creation Order**:
+- Terraform deploy creates Lambda function infrastructure first
+- Python deploy updates function code after infrastructure exists

@@ -1,101 +1,45 @@
-# CI/CD Workflow Generation Plan
+# Phase 2: Workflow Generation Plan
 
-**Created**: 2025-11-08T22:51:58Z
-**Phase**: Phase 2 - Generate Workflows
+## Steps
 
-## Step 1: Load Dependency Information from Phase 1
+- [x] Load Dependency Information from Phase 1
+- [x] Verify Clean State
+- [x] Read Language-Specific Standards
+- [x] Calculate Execution Order Based on Dependencies
+- [x] Generate Single Production Workflow
+- [x] Apply Language-Specific Standards
+- [x] Document Dependency Handling
+- [x] Validate Workflow Linting and Dependency Handling
+- [ ] Present Workflow YAML Preview
+- [ ] Checkpoint
 
-- [x] Read dependency map from Phase 1
-- [x] Identify artifact requirements
+## Execution Order
 
-**Dependency Map**:
-- Terraform depends on Python (artifact dependency)
-- Python deploy depends on Terraform deploy (infrastructure dependency)
-- Artifact: `lambda_function.zip`
-- Source: `src/lambda-python-s3-lambda-trigger`
-- Destination: `iac/terraform/lambda_function.zip`
+Based on dependency analysis:
 
-## Step 2: Verify Clean State
+1. **Python CI Jobs** (parallel):
+   - `python-lint`
+   - `python-security`
+   - `python-test`
 
-- [x] Check for existing workflows
-- [x] Document workflow generation approach
+2. **Python Build Job**:
+   - `python-build` - Builds Lambda package directly in `iac/terraform/lambda_function.zip` (PREFERRED approach)
 
-**State**: No existing workflows (deleted during regeneration)
-**Action**: Create new single unified workflow file
+3. **Terraform CI Jobs** (parallel):
+   - `terraform-security`
+   - `terraform-validate`
 
-## Step 3: Read Language-Specific Standards
+4. **Terraform Deploy Job**:
+   - `terraform-deploy` - Depends on Python build (needs Lambda package) and Terraform CI jobs
+   - Uses Lambda package from `iac/terraform/lambda_function.zip`
+   - Terraform manages Lambda function deployment (no separate python-deploy needed)
 
-- [x] Read Python standards (`python-standards.mdc`)
-- [x] Read Terraform standards (`terraform-standards.mdc`)
-- [x] Read dependency handling patterns (`workflow-dependency-handling.mdc`)
+## Dependency Handling Strategy
 
-## Step 4: Calculate Execution Order Based on Dependencies
-
-- [x] Build dependency graph
-- [x] Document execution order
-
-**Execution Order**:
-1. Python CI jobs (lint, security, tests) - parallel
-2. Python build - after CI jobs
-3. Terraform CI jobs (security, validate) - parallel
-4. Terraform deploy - after Terraform CI jobs AND Python build (for artifact)
-5. Python deploy - after Python build AND Terraform deploy (for infrastructure)
-
-## Step 5: Generate Single Production Workflow
-
-- [x] Generate workflow YAML file
-- [x] Apply Python standards
-- [x] Apply Terraform standards
-- [x] Implement dependency handling
-
-**Workflow File**: `.github/workflows/ci-cd.yml` ✅ Generated
-
-## Step 6: Workflow Structure Requirements
-
-- [x] Add workflow trigger (main branch)
-- [x] Add permissions (contents: read, id-token: write)
-- [x] Add concurrency control
-- [x] Add Python jobs (lint, security, tests, build, deploy)
-- [x] Add Terraform jobs (security, validate, deploy)
-- [x] Add dependency handling for Terraform deploy job (artifact dependency)
-- [x] Add dependency handling for Python deploy job (infrastructure dependency)
-
-## Step 7: Apply Language-Specific Standards
-
-- [x] Apply Python CI/CD patterns
-- [x] Apply Terraform CI/CD patterns
-- [x] Apply dependency handling patterns
-
-## Step 8: Document Dependency Handling
-
-- [x] Document artifact passing between Python build and Terraform deploy
-- [x] Document infrastructure dependency: Python deploy needs Terraform deploy
-- [x] Document job dependencies using `needs:`
-
-**Dependency Pattern**:
-- **Artifact Dependency**: `terraform-deploy` needs `python-build` (for Lambda package artifact)
-- **Infrastructure Dependency**: `python-deploy` needs `terraform-deploy` (Lambda function must exist before updating code)
-
-## Step 9: Validate Workflow Linting and Dependency Handling
-
-- [x] Validate YAML syntax
-- [x] Validate GitHub Actions expression syntax
-- [x] Check for missing required fields
-- [x] Verify job dependencies are correct
-- [x] Verify dependency handling steps are present
-- [x] Fix any linting errors
-
-**Validation Result**: ✅ Workflow is valid. Linter warnings about secrets/vars are expected and not errors.
-
-## Step 10: Present Workflow YAML Preview
-
-- [x] Show workflow summary
-- [x] Highlight dependency handling
-- [x] Show execution order
-
-## Step 11: Checkpoint
-
-- [ ] Wait for user confirmation
-- [ ] Update plan checkboxes
-- [ ] Update cicd-state.md
+**PREFERRED - Local Build Placement**:
+- Python build job builds Lambda package directly in `iac/terraform/lambda_function.zip`
+- Terraform deploy job uses the package directly from that location
+- No artifact upload/download needed
+- Terraform's `source_code_hash` automatically detects changes and updates Lambda function code
+- No separate `python-deploy` job needed (Terraform handles Lambda deployment)
 

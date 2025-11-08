@@ -130,25 +130,32 @@ If you need to conditionally run an entire job based on file existence, either:
            - Use dependency map from Phase 1 to determine correct job dependencies
            - If artifact-mappings.json shows Terraform needs Python artifact → `terraform-deploy` needs `python-build`
            - If Python deploy updates Lambda functions that Terraform creates → `python-deploy` needs `terraform-deploy`
-       - **Dependency Handling** (CRITICAL - MANDATORY if dependencies detected):
+         - **Dependency Handling** (CRITICAL - MANDATORY if dependencies detected):
          - **MANDATORY CHECK**: If Phase 1 detected dependencies for this code type, dependency handling steps MUST be included
-         - **Load Artifact Mapping** (PREFERRED):
-           - **CRITICAL**: Read `.code-docs/artifact-mappings.json` if it exists
-           - Extract dependency information from `mappings` array
-           - For each mapping entry:
-             - Use `artifact_name` for artifact download
-             - Use `artifact_destination_path` for artifact placement
-         - **For Terraform workflows**: If Terraform code references artifacts OR mapping file indicates dependencies, dependency handling is MANDATORY
-         - **Steps MUST include** (in this exact order):
-           1. **Download artifacts from upstream build jobs FIRST** (e.g., Lambda zip from Python build job)
-              - Use `actions/download-artifact@v4` with artifact name from upstream build job
-              - **If mapping file exists**: Use exact artifact name from mapping
-              - **If mapping file does not exist**: Use patterns from `terraform-standards.mdc` or `workflow-dependency-handling.mdc`
-           2. **Place artifacts in correct location** where deployment code expects them
-              - **If mapping file exists**: Use exact path from `artifact_destination_path` field
-              - **If mapping file does not exist**: For Terraform, if code references `lambda_function.zip`, place it where Terraform expects it
-           3. **Verify artifacts exist** before proceeding with deployment operations
-           4. **Pass artifact information** to deployment steps (environment variables, Terraform variables, etc.)
+         - **PREFERRED - Local Build Placement**: For Lambda functions and similar artifacts, the PREFERRED approach is to build artifacts directly where Terraform expects them:
+           - **Python Lambda Example**: Build Lambda package directly in Terraform directory (e.g., `iac/terraform/lambda_function.zip`) during Python build job
+           - **Benefits**: Terraform deploys Lambda source directly, no artifact upload/download needed, simpler workflow
+           - **Implementation**: Upstream build job builds artifact in Terraform directory, Terraform deploy job verifies and uses it directly
+           - **Terraform Deploys Source**: Terraform's `source_code_hash` automatically detects changes and updates Lambda function code
+           - **No Separate Deploy Job**: When Terraform manages Lambda, no separate `python-deploy` job is needed
+         - **ALTERNATIVE - Artifact Upload/Download**: If local build placement is not feasible, use artifact upload/download:
+           - **Load Artifact Mapping** (PREFERRED):
+             - **CRITICAL**: Read `.code-docs/artifact-mappings.json` if it exists
+             - Extract dependency information from `mappings` array
+             - For each mapping entry:
+               - Use `artifact_name` for artifact download
+               - Use `artifact_destination_path` for artifact placement
+           - **For Terraform workflows**: If Terraform code references artifacts OR mapping file indicates dependencies, dependency handling is MANDATORY
+           - **Steps MUST include** (in this exact order):
+             1. **Download artifacts from upstream build jobs FIRST** (e.g., Lambda zip from Python build job)
+                - Use `actions/download-artifact@v4` with artifact name from upstream build job
+                - **If mapping file exists**: Use exact artifact name from mapping
+                - **If mapping file does not exist**: Use patterns from `terraform-standards.mdc` or `workflow-dependency-handling.mdc`
+             2. **Place artifacts in correct location** where deployment code expects them
+                - **If mapping file exists**: Use exact path from `artifact_destination_path` field
+                - **If mapping file does not exist**: For Terraform, if code references `lambda_function.zip`, place it where Terraform expects it
+             3. **Verify artifacts exist** before proceeding with deployment operations
+             4. **Pass artifact information** to deployment steps (environment variables, Terraform variables, etc.)
          - **DO NOT SKIP**: If dependencies are detected, these steps are MANDATORY, not optional
        - Deploys to environment
        - Uses GitHub `environment` for secrets and protection rules

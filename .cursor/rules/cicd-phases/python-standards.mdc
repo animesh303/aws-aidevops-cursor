@@ -72,20 +72,28 @@ Define CI/CD workflow patterns and standards for Python code in single productio
   - Cache pip dependencies
   - Install dependencies
   - **Build Lambda deployment package** (if applicable):
-    ```yaml
-    - name: Build Lambda package
-      run: |
-        zip -r lambda-package.zip . -x "*.git*" "*.md" "tests/*"
-    ```
-  - **Upload artifacts for downstream jobs** (if this Python code is a dependency):
-    ```yaml
-    - name: Upload Lambda package artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: lambda-package
-        path: lambda-package.zip
-        retention-days: 1
-    ```
+    - **PREFERRED - Local Build Placement**: If Terraform manages the Lambda function, build the package directly where Terraform expects it:
+      ```yaml
+      - name: Build Lambda package for Terraform
+        run: |
+          mkdir -p ./iac/terraform
+          zip -r ./iac/terraform/lambda_function.zip . -x "*.git*" "*.md" "tests/*" "*.tf*" "iac/**"
+          echo "✓ Lambda package built at: ./iac/terraform/lambda_function.zip"
+      ```
+      - **Benefits**: Terraform deploys Lambda source directly, no artifact upload/download needed, simpler workflow
+      - **Note**: Terraform's `source_code_hash` attribute automatically detects changes and updates Lambda function code
+    - **ALTERNATIVE - Artifact Upload**: If local build placement is not feasible (e.g., multiple consumers), use artifact upload:
+      ```yaml
+      - name: Build Lambda package
+        run: |
+          zip -r lambda-package.zip . -x "*.git*" "*.md" "tests/*"
+      - name: Upload Lambda package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package
+          path: lambda-package.zip
+          retention-days: 1
+      ```
 
 ## Deployment Job
 
@@ -130,8 +138,18 @@ Define CI/CD workflow patterns and standards for Python code in single productio
 
 **When Python code is a dependency for other code types** (e.g., Terraform needs Lambda package):
 
-- **Build and Package**: Create Lambda deployment package (zip file) in build job
-- **Upload Artifacts**: Upload packages using `actions/upload-artifact@v4` in build job
-- **Artifact Naming**: Use simple, consistent naming: `lambda-package` (no environment suffix needed for single workflow)
-- **Download in Downstream Jobs**: Downstream deploy jobs (e.g., `terraform-deploy`) download artifacts from build job using `actions/download-artifact@v4`
-- **Artifact Passing**: All artifact passing happens within the same workflow using GitHub Actions artifacts
+- **PREFERRED - Local Build Placement**: If Terraform manages the Lambda function, build the package directly where Terraform expects it:
+  - **Build Location**: Build Lambda package directly in Terraform directory (e.g., `iac/terraform/lambda_function.zip`)
+  - **Benefits**:
+    - Terraform deploys Lambda source directly via `terraform apply`
+    - No artifact upload/download needed
+    - Simpler workflow with fewer steps
+    - Terraform's `source_code_hash` automatically detects changes and updates Lambda function code
+  - **Implementation**: Build job creates package in Terraform directory, Terraform deploy job uses it directly
+  - **No Separate Deploy Job Needed**: When Terraform manages Lambda, no separate `python-deploy` job is needed - Terraform handles both infrastructure and Lambda source code deployment
+- **ALTERNATIVE - Artifact Upload/Download**: If local build placement is not feasible (e.g., multiple consumers or complex dependency chains):
+  - **Build and Package**: Create Lambda deployment package (zip file) in build job
+  - **Upload Artifacts**: Upload packages using `actions/upload-artifact@v4` in build job
+  - **Artifact Naming**: Use simple, consistent naming: `lambda-package` (no environment suffix needed for single workflow)
+  - **Download in Downstream Jobs**: Downstream deploy jobs (e.g., `terraform-deploy`) download artifacts from build job using `actions/download-artifact@v4`
+  - **Artifact Passing**: All artifact passing happens within the same workflow using GitHub Actions artifacts

@@ -20,7 +20,78 @@ alwaysApply: false
 
 **When Code Type A needs an artifact from Code Type B** (e.g., Terraform needs Python Lambda package):
 
-### Upstream Job (Code Type B - Python Build)
+### PREFERRED Method: Local Build Placement
+
+**For Lambda functions and similar artifacts, the PREFERRED approach is to build artifacts directly where Terraform expects them:**
+
+#### Upstream Job (Code Type B - Python Build)
+
+- Build Lambda package directly in Terraform directory:
+  ```yaml
+  python-build:
+    needs: [python-lint, python-security, python-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        working-directory: src/lambda-python-{feature-name}
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Build Lambda package for Terraform
+        run: |
+          mkdir -p ./iac/terraform
+          cd src/lambda-python-{feature-name}
+          zip -r ../../iac/terraform/lambda_function.zip . -x "*.git*" "*.md" "tests/*"
+          cd ../..
+          echo "✓ Lambda package built at: ./iac/terraform/lambda_function.zip"
+          ls -lh ./iac/terraform/lambda_function.zip
+  ```
+
+**Benefits of Local Build Placement:**
+
+- **Simpler workflow**: No artifact upload/download steps needed
+- **Terraform deploys source directly**: Terraform's `source_code_hash` automatically detects changes and updates Lambda function code
+- **Fewer path issues**: Artifact is already where Terraform expects it
+- **No separate deploy job needed**: When Terraform manages Lambda, no separate `python-deploy` job is needed
+
+#### Downstream Job (Code Type A - Terraform Deploy)
+
+- **CRITICAL**: Configure job dependency using `needs:` to wait for upstream **build job**:
+
+  ```yaml
+  terraform-deploy:
+    needs:
+      [terraform-lint, terraform-security, terraform-validate, python-build]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Lambda package exists
+        run: |
+          TERRAFORM_LAMBDA_PATH="./iac/terraform/lambda_function.zip"
+          if [ ! -f "$TERRAFORM_LAMBDA_PATH" ]; then
+            echo "Error: Lambda package not found at: $TERRAFORM_LAMBDA_PATH"
+            exit 1
+          fi
+          echo "✓ Lambda package verified at: $TERRAFORM_LAMBDA_PATH"
+          ls -lh "$TERRAFORM_LAMBDA_PATH"
+      # ... Terraform init/plan/apply steps
+  ```
+
+- **Order of operations**: Checkout → Verify artifact exists → Configure credentials → Terraform init/plan/apply
+- **Terraform automatically deploys**: When `terraform apply` runs, Terraform detects the zip file change via `source_code_hash` and updates the Lambda function code
+
+### ALTERNATIVE Method: Artifact Upload/Download
+
+**Use this method only if local build placement is not feasible (e.g., multiple consumers or complex dependency chains):**
+
+#### Upstream Job (Code Type B - Python Build)
 
 - Build and package artifacts (e.g., Lambda zip file)
 - Upload artifacts using `actions/upload-artifact@v4`:
@@ -33,7 +104,7 @@ alwaysApply: false
       retention-days: 1
   ```
 
-### Downstream Job (Code Type A - Terraform Deploy)
+#### Downstream Job (Code Type A - Terraform Deploy)
 
 - **CRITICAL**: Configure job dependency using `needs:` to wait for upstream **build job** (NOT deploy job):
   ```yaml
@@ -70,8 +141,12 @@ alwaysApply: false
       # If Terraform uses: filename = "lambda_function.zip" in the same directory
       # Place it where Terraform expects it (e.g., iac/terraform/lambda_function.zip)
       mkdir -p ./iac/terraform
-      cp ./lambda-package/lambda-package.zip ./iac/terraform/lambda_function.zip
-      # Adjust path based on actual Terraform code location and filename
+      PACKAGE_FILE=$(find ./lambda-package -name "*.zip" -type f | head -n 1)
+      if [ -z "$PACKAGE_FILE" ]; then
+        echo "Error: Lambda package zip file not found in downloaded artifact"
+        exit 1
+      fi
+      cp "$PACKAGE_FILE" ./iac/terraform/lambda_function.zip
       echo "TF_VAR_lambda_package_path=$(pwd)/iac/terraform/lambda_function.zip" >> $GITHUB_ENV
   ```
 - **Verify artifact exists** before Terraform operations:
@@ -168,15 +243,58 @@ steps:
 
 ## Artifact Passing Methods
 
-**For Unified Workflow**: All artifact passing happens within the same workflow using GitHub Actions artifacts.
+**For Unified Workflow**: Artifact passing happens within the same workflow. Two methods are available:
 
-### Method 1: GitHub Actions Artifacts (MANDATORY for unified workflow)
+### Method 1: Local Build Placement (PREFERRED for Lambda functions)
+
+**For Lambda functions and similar artifacts, build directly where Terraform expects them:**
+
+- Build artifact directly in Terraform directory during build job
+- No artifact upload/download needed
+- Terraform deploys source directly via `terraform apply`
+- Terraform's `source_code_hash` automatically detects changes and updates Lambda function code
+- **This is the PREFERRED method for Lambda functions managed by Terraform**
+
+**Pattern**:
+
+1. **Build Job** (upstream): Build artifact directly in Terraform directory
+
+   ```yaml
+   python-build:
+     needs: [python-lint, python-security, python-test]
+     steps:
+       - uses: actions/checkout@v4
+       - name: Build Lambda package for Terraform
+         run: |
+           mkdir -p ./iac/terraform
+           cd src/lambda-python-{feature-name}
+           zip -r ../../iac/terraform/lambda_function.zip . -x "*.git*" "*.md" "tests/*"
+           cd ../..
+   ```
+
+2. **Deploy Job** (downstream): Verify artifact exists, then Terraform applies
+   ```yaml
+   terraform-deploy:
+     needs:
+       [terraform-lint, terraform-security, terraform-validate, python-build]
+     steps:
+       - uses: actions/checkout@v4
+       - name: Verify Lambda package exists
+         run: |
+           if [ ! -f "./iac/terraform/lambda_function.zip" ]; then
+             echo "Error: Lambda package not found"
+             exit 1
+           fi
+       # ... Terraform init/plan/apply (Terraform deploys Lambda source automatically)
+   ```
+
+### Method 2: GitHub Actions Artifacts (ALTERNATIVE - use if local build placement not feasible)
 
 - Use `actions/upload-artifact@v4` in build jobs
 - Use `actions/download-artifact@v4` in deploy jobs
 - Works within same workflow run (jobs in same workflow)
 - Limited retention (default 1 day, configurable up to 90 days)
-- **This is the ONLY method needed for unified workflow architecture**
+- **Use this method only if local build placement is not feasible**
 
 **Pattern**:
 
@@ -209,6 +327,20 @@ steps:
 ## Single Dependency Pattern - Infrastructure Dependency
 
 **When Code Type A's deploy needs infrastructure created by Code Type B's deploy** (e.g., Python deploy needs Lambda function created by Terraform):
+
+### CRITICAL: Terraform Deploys Lambda Source Directly
+
+**IMPORTANT**: When Terraform manages Lambda functions, Terraform itself should deploy the Lambda source code. The `source_code_hash` attribute in Terraform automatically detects changes to the zip file and updates the Lambda function code when `terraform apply` runs. **This eliminates the need for separate Python deploy jobs that update Lambda function code.**
+
+**Pattern**:
+
+- Terraform creates Lambda function AND deploys source code
+- No separate `python-deploy` job needed
+- Terraform's `source_code_hash` handles code updates automatically
+
+### When Infrastructure Dependency Still Applies
+
+**Use this pattern only when Python deploy needs infrastructure that Terraform creates BUT Python deploy does NOT update Lambda function code** (e.g., Python deploy uses Lambda function created by Terraform for other purposes):
 
 ### Upstream Job (Code Type B - Terraform Deploy)
 
@@ -251,9 +383,10 @@ steps:
 
 **Key Points**:
 
-- Infrastructure dependency means the resource must exist before deploy
+- **For Lambda functions managed by Terraform**: Terraform deploys source code directly - no separate Python deploy job needed
+- **For other infrastructure dependencies**: Infrastructure dependency means the resource must exist before deploy
 - Wait for upstream deploy job, not build job
-- Common pattern: Application code deploy needs infrastructure to exist first
+- Common pattern: Application code deploy needs infrastructure to exist first (but NOT for Lambda function code updates when Terraform manages Lambda)
 
 ### Alternative Methods (Only if needed for special cases)
 

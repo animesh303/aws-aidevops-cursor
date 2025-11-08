@@ -80,8 +80,9 @@ Always follow this workflow when user mentions CICD GitHub workflow generation. 
 3. **Handle Dependencies in Workflows**:
    - Ensure dependent code artifacts are built/deployed before dependent workflows
    - Use workflow dependencies (`workflow_run` triggers) or job dependencies (`needs:`) to enforce order
-   - Download artifacts from upstream workflows when needed
-   - Example: Terraform deployment must wait for Python Lambda package to be built and uploaded
+   - **PREFERRED - Local Build Placement**: For Lambda functions and similar artifacts, build artifacts directly where Terraform expects them (e.g., `iac/terraform/lambda_function.zip`). This eliminates the need for artifact upload/download and allows Terraform to deploy Lambda source directly via `terraform apply`. Terraform's `source_code_hash` automatically detects changes and updates Lambda function code.
+   - **ALTERNATIVE - Artifact Upload/Download**: If local build placement is not feasible, download artifacts from upstream workflows when needed
+   - Example: Terraform deployment must wait for Python Lambda package to be built. PREFERRED: Build package directly in Terraform directory. ALTERNATIVE: Build package, upload as artifact, download in Terraform job.
 
 ## MANDATORY: Session Continuity and Re-generation
 
