@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "last_updated": "2025-01-28T15:20:00Z",
+  "lambda_functions": [
+    {
+      "function_name": "s3-lambda-trigger-hello-world",
+      "source_directory": "src/lambda-python-s3-lambda-trigger",
+      "runtime": "python3.12",
+      "artifact_name": "s3-lambda-trigger-package-dev",
+      "artifact_filename": "lambda_function.zip",
+      "jira_ticket": "AWS-5",
+      "feature_name": "s3-lambda-trigger"
+    }
+  ],
+  "terraform_resources": [
+    {
+      "resource_type": "aws_lambda_function",
+      "resource_name": "hello_world",
+      "terraform_file": "iac/terraform/s3-lambda-trigger-main.tf",
+      "artifact_reference": "lambda_function.zip",
+      "artifact_path_in_terraform": "iac/terraform/lambda_function.zip",
+      "depends_on_lambda": "s3-lambda-trigger-hello-world",
+      "jira_ticket": "AWS-5",
+      "feature_name": "s3-lambda-trigger"
+    }
+  ],
+  "mappings": [
+    {
+      "terraform_resource": "aws_lambda_function.hello_world",
+      "lambda_function": "s3-lambda-trigger-hello-world",
+      "artifact_name": "s3-lambda-trigger-package-dev",
+      "artifact_source_path": "src/lambda-python-s3-lambda-trigger",
+      "artifact_destination_path": "iac/terraform/lambda_function.zip",
+      "environment_artifacts": {
+        "dev": "s3-lambda-trigger-package-dev",
+        "test": "s3-lambda-trigger-package-test",
+        "prd": "s3-lambda-trigger-package-prd"
+      }
+    }
+  ]
+}
+
