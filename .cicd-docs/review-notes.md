@@ -14,10 +14,10 @@
 | **Workflow File** | `ci-cd.yml` (single unified production workflow) |
 | **Trigger** | Pushes to `main` branch + `workflow_dispatch` |
 | **Environment** | `production` (single environment) |
-| **Python Jobs** | lint, security, test (parallel), build |
-| **Terraform Jobs** | security, validate (parallel), deploy |
-| **Job Dependencies** | terraform-deploy needs: terraform-security, terraform-validate, python-build |
-| **Execution Order** | Python CI → Python Build → Terraform CI → Terraform Deploy |
+| **Python Jobs** | lint, security, test (parallel) |
+| **Terraform Jobs** | security, validate (parallel), deploy (combined) |
+| **Job Dependencies** | terraform-deploy needs: python-lint, python-security, python-test, terraform-security, terraform-validate |
+| **Execution Order** | Python CI → Terraform CI → Terraform Deploy (combined: Python Build + Terraform Deploy) |
 | **Workflow Modifications** | New workflow created (regenerated) |
 
 **Key Highlights:**
@@ -26,25 +26,26 @@
 - ✅ Jobs sequenced by dependencies using `needs:`
 - ✅ Single production environment
 - ✅ Environment protection rules configured
+- ✅ Combined job pattern (Python build + Terraform deploy in same job)
 
 ### Step 2: Review Dependency Handling ✅
 
 **Dependency Relationships:**
 
 1. **Artifact Dependency (Terraform → Python)**:
-   - ✅ Python build job creates `lambda_function.zip` at `iac/terraform/lambda_function.zip`
-   - ✅ Terraform deploy job waits for `python-build` via `needs: [terraform-security, terraform-validate, python-build]`
-   - ✅ Terraform deploy verifies artifact exists before deployment
-   - ✅ Local Build Placement approach (no artifact upload/download needed)
+   - ✅ Python build steps included in `terraform-deploy` job
+   - ✅ Lambda package built directly in `iac/terraform/lambda_function.zip` (same runner)
+   - ✅ Terraform deploy uses artifact from same runner (no upload/download needed)
+   - ✅ Combined job pattern eliminates artifact passing complexity
 
 **Dependency Map:**
 - `terraform → depends on → python` (artifact dependency) ✅
-- Job dependency: `terraform-deploy` needs `python-build` ✅
+- Job dependency: `terraform-deploy` needs all CI jobs (Python + Terraform) ✅
 
 **Artifact Passing:**
-- ✅ Python build creates artifact directly in Terraform directory
-- ✅ Terraform deploy uses artifact directly from filesystem
-- ✅ No GitHub Actions artifact upload/download needed (simpler workflow)
+- ✅ Combined job pattern: Python build and Terraform deploy in same job
+- ✅ No artifact upload/download needed (same runner)
+- ✅ Simplest workflow with fewer jobs
 
 ### Step 3: Review Deployment Flow ✅
 
@@ -53,11 +54,10 @@
 - ✅ All deploy jobs use `environment: production`
 - ✅ Jobs sequenced correctly based on dependencies using `needs:`
 - ✅ Code types with no dependencies run first (Python CI, Terraform CI in parallel)
-- ✅ Dependent code types wait for upstream jobs (Terraform deploy waits for Python build)
+- ✅ Dependent code types wait for upstream jobs (Terraform deploy waits for all CI jobs)
 
 **Job Dependencies:**
-- ✅ `python-build` needs: `[python-lint, python-security, python-test]`
-- ✅ `terraform-deploy` needs: `[terraform-security, terraform-validate, python-build]`
+- ✅ `terraform-deploy` needs: `[python-lint, python-security, python-test, terraform-security, terraform-validate]`
 
 **Production Environment:**
 - ✅ All deploy jobs use `environment: production`
@@ -74,6 +74,7 @@
 - ✅ Generated workflow aligns with current codebase
 - ✅ All detected code types (Python, Terraform) are included
 - ✅ Workflow triggers on main branch and deploys to production environment
+- ✅ Uses combined job pattern (most preferred approach)
 
 ### Step 5: Validate Workflow Linting ✅
 

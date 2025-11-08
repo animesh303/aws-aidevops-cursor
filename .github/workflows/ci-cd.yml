@@ -103,33 +103,6 @@ jobs:
             htmlcov/
           retention-days: 1
 
-  # Python Build Job
-  python-build:
-    name: Python Build
-    needs: [python-lint, python-security, python-test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-      - name: Install dependencies
-        working-directory: src/lambda-python-s3-lambda-trigger
-        run: |
-          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
-      - name: Build Lambda package for Terraform
-        run: |
-          mkdir -p ./iac/terraform
-          cd src/lambda-python-s3-lambda-trigger
-          zip -r ../../iac/terraform/lambda_function.zip . -x "*.git*" "*.md" "tests/*" "*.tf*" "iac/**"
-          cd ../..
-          echo "✓ Lambda package built at: ./iac/terraform/lambda_function.zip"
-          ls -lh ./iac/terraform/lambda_function.zip
-
   # Terraform CI Jobs (run in parallel)
   terraform-security:
     name: Terraform Security Scan
@@ -179,14 +152,37 @@ jobs:
         working-directory: iac/terraform
         run: terraform fmt
 
-  # Terraform Deploy Job
+  # Terraform Deploy Job (Combined: Python Build + Terraform Deploy)
   terraform-deploy:
     name: Terraform Deploy
-    needs: [terraform-security, terraform-validate, python-build]
+    needs: [python-lint, python-security, python-test, terraform-security, terraform-validate]
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
+      
+      # Python Build Steps (build artifact where Terraform expects it)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+      - name: Install dependencies
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Build Lambda package for Terraform
+        run: |
+          mkdir -p ./iac/terraform
+          cd src/lambda-python-s3-lambda-trigger
+          zip -r ../../iac/terraform/lambda_function.zip . -x "*.git*" "*.md" "tests/*" "*.tf*" "iac/**"
+          cd ../..
+          echo "✓ Lambda package built at: ./iac/terraform/lambda_function.zip"
+          ls -lh ./iac/terraform/lambda_function.zip
+      
+      # Verify artifact exists before Terraform operations
       - name: Verify Lambda package exists
         run: |
           TERRAFORM_LAMBDA_PATH="./iac/terraform/lambda_function.zip"
@@ -196,6 +192,8 @@ jobs:
           fi
           echo "✓ Lambda package verified at: $TERRAFORM_LAMBDA_PATH"
           ls -lh "$TERRAFORM_LAMBDA_PATH"
+      
+      # Terraform Deploy Steps
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -262,4 +260,3 @@ jobs:
           else
             terraform apply tfplan
           fi
-

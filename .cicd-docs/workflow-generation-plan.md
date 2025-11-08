@@ -29,10 +29,14 @@
 
 **Execution Order:**
 1. Python CI jobs (lint, security, test) - parallel
-2. Python build - after CI jobs
-3. Terraform CI jobs (security, validate) - parallel
-4. Terraform deploy - after Terraform CI jobs AND Python build
-5. Python deploy - NOT NEEDED (Terraform manages Lambda source)
+2. Terraform CI jobs (security, validate) - parallel
+3. Terraform deploy (combined: Python build + Terraform deploy) - after all CI jobs
+
+**Pattern Selected**: Option 1 - MOST PREFERRED - Combined Build and Deploy Job
+- No separate `python-build` job needed
+- Python build steps included in `terraform-deploy` job
+- Build happens in same runner as Terraform deploy
+- Benefits: No artifact passing needed, simplest workflow, fewer jobs
 
 ### Step 5: Generate Single Production Workflow ✅
 
@@ -42,14 +46,15 @@
 - Trigger: `push` to `main` branch + `workflow_dispatch`
 - Environment: `production`
 - Jobs:
-  - Python: lint, security, test (parallel), build
-  - Terraform: security, validate (parallel), deploy
-  - Dependencies: terraform-deploy needs python-build
+  - Python: lint, security, test (parallel)
+  - Terraform: security, validate (parallel)
+  - Terraform deploy: Combined Python build + Terraform deploy (needs: all CI jobs)
 
 **Dependency Handling:**
-- PREFERRED: Local Build Placement
-- Python build creates `lambda_function.zip` directly in `iac/terraform/`
-- Terraform deploy uses artifact directly (no upload/download needed)
+- MOST PREFERRED: Combined Job Pattern
+- Python build steps in same job as Terraform deploy
+- No artifact upload/download needed (same runner)
+- Simplest workflow with fewer jobs
 
 ### Step 6: Workflow Structure Requirements ✅
 
@@ -62,12 +67,12 @@
 
 - Apply Python standards for Python jobs ✅
 - Apply Terraform standards for Terraform jobs ✅
-- Include dependency handling steps ✅
+- Use combined job pattern for dependency handling ✅
 
 ### Step 8: Document Dependency Handling ✅
 
-- Document artifact passing strategy ✅
-- Document job dependencies ✅
+- Document combined job pattern
+- Document job dependencies
 
 ### Step 9: Validate Workflow Linting and Dependency Handling ✅
 
@@ -75,6 +80,7 @@
 - Validate GitHub Actions expressions ✅
 - Check for job-level hashFiles() usage (BLOCKING ERROR) ✅ - No job-level usage found
 - Verify dependency handling steps are present ✅
+- All hashFiles() usage is at step level only (lines 88, 92) ✅
 
 ### Step 10: Present Workflow YAML Preview ⏳
 
