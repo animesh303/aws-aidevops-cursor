@@ -14,10 +14,7 @@
 - Artifact: `lambda_function.zip`
 - Source: `src/lambda-python-s3-lambda-trigger`
 - Destination: `iac/terraform/lambda_function.zip`
-- Artifact names by environment:
-  - Dev: `s3-lambda-trigger-package-dev`
-  - Test: `s3-lambda-trigger-package-test`
-  - Prod: `s3-lambda-trigger-package-prd`
+- Artifact name: `lambda-package` (for single production workflow)
 
 ### Step 2: Scan Project Root and Subdirectories for Code Types
 
@@ -37,7 +34,7 @@
 - [x] Check `.github/workflows/` directory
 - [x] Directory does not exist (regenerated - clean start)
 - [x] No existing workflows to analyze
-- [x] Action: Create new workflows
+- [x] Action: Create new single production workflow
 
 ### Step 4: Identify Detected Code Types
 
@@ -64,51 +61,54 @@
   "code_type": "terraform",
   "depends_on": "python",
   "artifacts": ["lambda_function.zip"],
-  "artifact_name": "s3-lambda-trigger-package-{env}",
+  "artifact_name": "lambda-package",
   "artifact_source_path": "src/lambda-python-s3-lambda-trigger",
-  "artifact_destination_path": "iac/terraform/lambda_function.zip",
-  "environment_artifacts": {
-    "dev": "s3-lambda-trigger-package-dev",
-    "test": "s3-lambda-trigger-package-test",
-    "prd": "s3-lambda-trigger-package-prd"
-  }
+  "artifact_destination_path": "iac/terraform/lambda_function.zip"
 }
 ```
 
 **Workflow Dependency Requirements**:
 - Python workflow must complete before Terraform workflow
-- Python workflow must upload Lambda package artifact
-- Terraform workflow must download Lambda package artifact
-- Artifact must be placed at `iac/terraform/lambda_function.zip`
+- Python build job must upload Lambda package artifact (`lambda-package`)
+- Terraform deploy job must download Lambda package artifact and place it at `iac/terraform/lambda_function.zip`
+- Terraform deploy job must wait for Python deploy job to complete
 
-### Step 6: Draft Single-Environment Workflow Plan
+### Step 6: Draft Single Production Workflow Plan
 
-**Planned Workflows** (9 total):
+**Planned Workflow** (1 file):
 
-#### Orchestrator Workflows (3):
-- `orchestrator-dev.yml` - Orchestrates Python and Terraform for dev environment
-- `orchestrator-test.yml` - Orchestrates Python and Terraform for test environment
-- `orchestrator-prd.yml` - Orchestrates Python and Terraform for prod environment
+#### Single Production Workflow:
+- `ci-cd.yml` - Single unified production workflow containing all code types
+  - Triggers on `main` branch push only
+  - Contains jobs for Python and Terraform
+  - All deploy jobs use `environment: production`
+  - Job dependencies enforce execution order
 
-#### Python Workflows (3):
-- `python-dev.yml` - CI + Deploy to Dev (triggers on `develop` branch push)
-- `python-test.yml` - CI + Deploy to Test (triggers on `main` branch push)
-- `python-prd.yml` - CI + Deploy to Prod (triggers via workflow_run after test completion)
+**Workflow Structure**:
+- **Python Jobs**:
+  - `python-lint` - Lint job (parallel)
+  - `python-security` - Security scan job (parallel)
+  - `python-tests` - Test job (parallel, conditional on tests/ directory)
+  - `python-build` - Build job (needs: all CI jobs)
+  - `python-deploy` - Deploy job (needs: python-build, environment: production)
 
-#### Terraform Workflows (3):
-- `terraform-dev.yml` - CI + Deploy to Dev (triggers on `develop` branch push OR via orchestrator)
-- `terraform-test.yml` - CI + Deploy to Test (triggers on `main` branch push OR via orchestrator)
-- `terraform-prd.yml` - CI + Deploy to Prod (triggers via workflow_run after test completion OR via orchestrator)
+- **Terraform Jobs**:
+  - `terraform-security` - Security scan job (parallel)
+  - `terraform-validate` - Validate job (parallel)
+  - `terraform-deploy` - Deploy job (needs: terraform-security, terraform-validate, python-deploy, environment: production)
 
 **Dependency Handling**:
-- Terraform workflows download Lambda package from Python workflows
-- Artifact name: `s3-lambda-trigger-package-{environment}`
+- Terraform deploy job downloads Lambda package from Python build job
+- Artifact name: `lambda-package`
 - Artifact destination: `iac/terraform/lambda_function.zip`
-- Supports both `workflow_call` (orchestrator) and `workflow_run` triggers
+- Job dependency: `terraform-deploy` needs `python-deploy` to complete first
 
-**Workflow Modifications**:
-- No existing workflows to modify (regenerated)
-- All workflows will be newly created
+**Execution Order**:
+1. Python CI jobs (lint, security, tests) - run in parallel
+2. Python build job - runs after CI jobs
+3. Python deploy job - runs after build
+4. Terraform CI jobs (security, validate) - run in parallel (can start with Python CI)
+5. Terraform deploy job - runs after Terraform CI jobs AND Python deploy job
 
 ### Step 7: User Plan Review Checkpoint
 

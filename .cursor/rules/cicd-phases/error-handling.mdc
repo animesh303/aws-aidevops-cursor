@@ -196,10 +196,9 @@ alwaysApply: false
 
 **Procedure**:
 
-1. See `rollback-procedures.mdc` for detailed steps
-2. For regeneration: Delete `.cicd-docs/` and `.github/workflows/` directories
-3. Start fresh from Phase 1
-4. Log rollback in audit.md
+1. See `rollback-procedures.mdc` for detailed rollback scenarios and steps
+2. Follow appropriate rollback scenario based on current phase and commit status
+3. Log rollback in audit.md
 
 ### Recovery: Manual Intervention Required
 

@@ -20,18 +20,13 @@ if: ${{ hashFiles('tests/**') != '' }} # ✓ Correct
 
 ---
 
-## Issue 3: Missing Checkout Step in `workflow_run` Triggered Jobs
+## Issue 3: Missing Checkout Step in Jobs
 
-**Problem**: Jobs triggered by `workflow_run` events don't automatically checkout code, causing "file not found" errors.
+**Problem**: Jobs don't automatically checkout code, causing "file not found" errors.
 
 **Error Example**:
 
 ```yaml
-on:
-  workflow_run:
-    workflows: ["Upstream Workflow"]
-    types: [completed]
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -39,7 +34,7 @@ jobs:
       - run: terraform apply # ❌ Error: No code checked out
 ```
 
-**Solution**: Always include checkout as the first step with the `ref` parameter:
+**Solution**: Always include checkout as the first step:
 
 ```yaml
 jobs:
@@ -47,16 +42,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_branch }}
       - run: terraform apply # ✓ Correct
 ```
 
 ---
 
-## Issue 4: Incorrect Artifact Download for Cross-Workflow Dependencies
+## Issue 4: Incorrect Artifact Download for Job Dependencies
 
-**Problem**: Attempting to download artifacts from upstream workflows without proper authentication or run-id.
+**Problem**: Attempting to download artifacts from upstream jobs without proper configuration.
 
 **Error Example**:
 
@@ -64,18 +57,19 @@ jobs:
 - uses: actions/download-artifact@v4
   with:
     name: artifact-name
-    # ❌ Missing run-id and github-token for cross-workflow downloads
+    # ❌ Missing path or incorrect artifact name
 ```
 
-**Solution**: For `workflow_run` triggers, always include `run-id` and `github-token`:
+**Solution**: For jobs within the same workflow, use simple artifact download:
 
 ```yaml
 - uses: actions/download-artifact@v4
   with:
     name: artifact-name
-    run-id: ${{ github.event.workflow_run.id }}
-    github-token: ${{ secrets.GITHUB_TOKEN }}
+    path: ./artifacts
 ```
+
+**Note**: For single production workflow, all artifact passing happens within the same workflow. No cross-workflow downloads needed.
 
 **See Also**: `workflow-dependency-handling.mdc` for comprehensive dependency patterns
 
@@ -146,27 +140,30 @@ jobs:
 
 **Problem**: Using incorrect environment names causes deployment failures.
 
-**Required Environment Names**:
+**Required Environment Name**:
 
-- `dev` - Development environment
-- `test` - Test environment
-- `prod` - Production environment
+- `production` - Production environment (single environment only)
 
-**Solution**: Always use exact environment names: `dev`, `test`, `prod` (lowercase, no variations).
+**Solution**: Always use exact environment name: `production` (lowercase, no variations). All deploy jobs in the single production workflow use `environment: production`.
 
 ---
 
 ## Issue 9: Invalid Workflow Trigger Syntax
 
-**Problem**: Incorrect `workflow_run` trigger syntax causes workflows not to trigger.
+**Problem**: Incorrect workflow trigger syntax causes workflows not to trigger.
+
+**Required Trigger**:
+
+- `push` to `main` branch only
+- `workflow_dispatch` for manual execution
 
 **Common Errors**:
 
-- Missing `types: [completed]`
-- Incorrect workflow name (must match exact workflow name)
-- Missing `branches` filter for prod workflows
+- Using other branch names (should be `main` only)
+- Missing `workflow_dispatch` for manual triggers
+- Using `workflow_run` triggers (not needed for single workflow)
 
-**Solution**: Follow exact syntax from `phase2-generate-workflow.mdc` workflow structure examples.
+**Solution**: Follow exact syntax from `phase2-generate-workflow.mdc` workflow structure examples. Single production workflow triggers on `main` branch push only.
 
 ---
 

@@ -9,7 +9,7 @@ alwaysApply: true
 3. **Update plan checkboxes** - Mark completed steps [x] in plan document `.cicd-docs/workflow-generation-plan.md` (or `.cicd-docs/phase2-plan.md`) as work progresses
 4. **Update cicd-state.md** - Update Phase 2 status and generated files list after completion
 5. **Log prompt with timestamp** - Record approval prompt in `.cicd-docs/audit.md` before asking
-6. **Ask for Confirmation and WAIT**: Ask: "Workflows generated. Are you ready to review and confirm?" - DO NOT PROCEED until user confirms
+6. **Ask for Confirmation and WAIT**: Ask: "Single production workflow generated. Are you ready to review and confirm?" - DO NOT PROCEED until user confirms
 7. **Log response with timestamp** - Record user response in `.cicd-docs/audit.md` after receiving it
 8. **MANDATORY**: Remind user to commit artifacts to git after phase completion
 
@@ -22,7 +22,7 @@ alwaysApply: true
 3. **Update plan checkboxes** - Mark completed steps [x] in plan document `.cicd-docs/review-notes.md` (or `.cicd-docs/phase3-notes.md`) as work progresses
 4. **Update cicd-state.md** - Update Phase 3 status and review notes after completion
 5. **Log prompt with timestamp** - Record approval prompt in `.cicd-docs/audit.md` before asking
-6. **Ask for Final Confirmation**: Ask: "CICD setup complete. Do you approve the final workflows for integration?" - DO NOT PROCEED until user confirms
+6. **Ask for Final Confirmation**: Ask: "Single production CICD workflow complete. Do you approve the final workflow for integration?" - DO NOT PROCEED until user confirms
 7. **Log response with timestamp** - Record user response in `.cicd-docs/audit.md` after receiving it
 8. **MANDATORY**: Remind user to commit artifacts to git after phase completion
 
@@ -49,98 +49,35 @@ alwaysApply: true
 - Generate workflows ONLY for detected code types
 - If existing workflows exist, analyze them and modify/remove as needed based on current codebase
 
-## Environment-Specific CI/CD Workflow Architecture
+## Single Production CI/CD Workflow Architecture
 
-### Two-Tier Architecture: Orchestrator + Code Type Workflows
+### Unified Single Workflow Architecture
 
-**When dependencies exist between code types**, generate orchestrator workflows to manage execution order:
+Generate **one unified production workflow file** (`.github/workflows/ci-cd.yml`) that contains jobs for ALL detected code types:
 
-**Orchestrator Workflows** (one per environment):
-
-- `orchestrator-dev.yml` - Orchestrates all code type workflows for dev environment
-- `orchestrator-test.yml` - Orchestrates all code type workflows for test environment
-- `orchestrator-prd.yml` - Orchestrates all code type workflows for prod environment
-
-**Code Type Workflows** (three per code type, per environment):
-
-- `{code-type}-dev.yml` - CI + Deploy to Dev (can be triggered independently or via orchestrator)
-- `{code-type}-test.yml` - CI + Deploy to Test (can be triggered independently or via orchestrator)
-- `{code-type}-prd.yml` - CI + Deploy to Prod (can be triggered independently or via orchestrator)
-
-**When to Generate Orchestrators**:
-
-- **ALWAYS generate orchestrators**: Orchestrator workflows are generated for ALL scenarios to maintain consistency and simplify dependency management
-- This ensures uniform workflow structure regardless of the number of code types or dependency complexity
-
-**Orchestrator Benefits**:
-
-- Simplified dependency management (dependencies managed in one place)
-- Clear execution order (topological sort ensures correct order)
-- Simple syntax using reusable workflows (`uses: ./.github/workflows/wf.yml` in jobs)
-- Automatic dependency chaining (each job waits for previous via `needs:`)
-- Centralized error handling and reporting
-- Reusable code type workflows (can still be triggered independently)
-- Easier debugging (single workflow run shows entire deployment pipeline)
-
-**See**: `orchestrator-workflow-patterns.md` for detailed orchestrator patterns and implementation
-
-### Code Type Workflows (Individual)
-
-For each detected code type, generate **three separate workflow files**, one per environment:
-
-**Deploy to Dev Workflow** (`.github/workflows/{code-type}-dev.yml`):
+**Single Production Workflow** (`.github/workflows/ci-cd.yml`):
 
 - **Trigger**:
-  - Runs on pushes to `develop` branch
-  - Supports `workflow_call` trigger for orchestrator invocation (required for reusable workflows)
-- **CI Jobs**: lint, test, security scan, artifact generation
-  - Runs as separate parallel jobs where possible
-  - Uploads build artifacts
-- **Deploy to Dev Job**:
-  - **Requires**: Successful completion of all CI jobs
-  - **If has dependencies**: Downloads artifacts from upstream workflows before deployment
-  - Deploys to Development environment
-  - Uses GitHub `environment: dev` for secrets and protection rules
-
-**Deploy to Test Workflow** (`.github/workflows/{code-type}-test.yml`):
-
-- **Trigger**:
-  - Runs on pushes to `main` branch
-  - Supports `workflow_call` trigger for orchestrator invocation (required for reusable workflows)
-- **CI Jobs**: lint, test, security scan, artifact generation
-  - Runs as separate parallel jobs where possible
-  - Uploads build artifacts
-- **Deploy to Test Job**:
-  - **Requires**: Successful completion of all CI jobs
-  - **If has dependencies**: Downloads artifacts from upstream workflows before deployment
-  - Deploys to Test environment
-  - Uses GitHub `environment: test` for secrets and protection rules
-
-**Deploy to Prod Workflow** (`.github/workflows/{code-type}-prd.yml`):
-
-- **Trigger**:
-  - `workflow_run` on successful completion of `{code-type}-test.yml` workflow
-  - **Branch Requirement**: MUST only trigger when test workflow ran on `main` branch
-  - Uses `branches: [main]` filter in `workflow_run` trigger
-  - Supports `workflow_call` trigger for orchestrator invocation (required for reusable workflows)
-- **CI Jobs**: lint, test, security scan, artifact generation
-  - Runs as part of the workflow
-  - Uploads build artifacts
-- **Deploy to Prod Job**:
-  - **Requires**: Successful completion of all CI jobs
-  - Deploys to Production environment
-  - Uses GitHub `environment: prod` with protection rules/approvals
-  - Protected with GitHub environment protection rules
+  - Runs on pushes to `main` branch only
+  - Supports `workflow_dispatch` trigger for manual execution
+- **Environment**: Single production environment (all deploy jobs use `environment: production`)
+- **Structure**: Contains jobs for each code type sequenced by dependencies
+- **Job Structure for Each Code Type**:
+  - **CI Jobs** (run in parallel): lint, security scan, test
+  - **Build Job** (runs after CI jobs): Build and package artifacts
+  - **Deploy Job** (runs after build and upstream dependencies): Deploy to production
+- **Dependency Handling**: Job dependencies (`needs:`) enforce execution order within the same workflow
+- **Artifact Passing**: Artifacts are passed between jobs using GitHub Actions artifacts within the same workflow
 
 **Workflow Structure:**
 
-- Each environment has its own workflow file
-- Each workflow contains CI jobs + deployment job for that environment
-- **Trigger Logic**:
-  - **Dev workflow**: `develop` branch push + `workflow_call` (for orchestrator)
-  - **Test workflow**: `main` branch push + `workflow_call` (for orchestrator)
-  - **Prod workflow**: `workflow_run` trigger after successful test workflow on `main` branch + `workflow_call` (for orchestrator)
-- **Dependency Handling**: Orchestrator workflows manage execution order using reusable workflow pattern (`uses: ./.github/workflows/wf.yml`)
+- Single workflow file contains all code types
+- Jobs are sequenced by dependencies using `needs:` dependencies
+- Code types with no dependencies run first
+- Dependent code types wait for upstream deploy jobs to complete
+- All deploy jobs use `environment: production`
+- **Trigger Logic**: `main` branch push only (no other branch triggers)
+- **Dependency Handling**: Job dependencies within the same workflow manage execution order
 
 ## Workflow Requirements
 
@@ -260,15 +197,14 @@ The workflow uses a two-level checkbox tracking system:
 
 ## Workflow Files
 
-Workflow files follow the pattern: `{code-type}-{environment}.yml`
+**Single Production Workflow File**:
 
-For each detected code type, three environment-specific workflow files (unified CI + CD):
+- `.github/workflows/ci-cd.yml` - Single unified production workflow containing all code types
+  - Triggers on `main` branch push only
+  - Contains jobs for all detected code types sequenced by dependencies
+  - All deploy jobs use `environment: production`
 
-- `.github/workflows/{code-type}-dev.yml` - CI + Deploy to dev (triggers on `develop` branch push)
-- `.github/workflows/{code-type}-test.yml` - CI + Deploy to test (triggers on `main` branch push)
-- `.github/workflows/{code-type}-prd.yml` - CI + Deploy to prod (triggers via workflow_run after successful test completion)
-
-Use kebab-case, descriptive file names based on detected code types
+Use kebab-case for workflow file name: `ci-cd.yml`
 
 ## Directory Structure
 
@@ -279,16 +215,10 @@ Use kebab-case, descriptive file names based on detected code types
 
 .github/
 └── workflows/                 # Generated GitHub Actions workflow files
-    ├── orchestrator-dev.yml        # Orchestrator for dev environment (if dependencies exist)
-    ├── orchestrator-test.yml       # Orchestrator for test environment (if dependencies exist)
-    ├── orchestrator-prd.yml        # Orchestrator for prod environment (if dependencies exist)
-    ├── {code-type}-dev.yml         # Dev environment workflow (CI + Deploy to Dev)
-    ├── {code-type}-test.yml        # Test environment workflow (CI + Deploy to Test)
-    └── {code-type}-prd.yml         # Prod environment workflow (CI + Deploy to Prod)
+    └── ci-cd.yml                  # Single production workflow (triggered by main branch)
 
 .cursor/rules/cicd-phases/    # CI/CD workflow generation rules
 ├── cicd-state.mdc              # Legacy state file (only if .cicd-docs/ doesn't exist)
-├── orchestrator-workflow-patterns.mdc  # Orchestrator workflow patterns
 ├── {code-type}-standards.mdc   # Language-specific CI/CD standards (one per code type)
 └── [phase files]              # Phase execution instructions
 ```
@@ -297,20 +227,17 @@ Use kebab-case, descriptive file names based on detected code types
 
 - **Language-Agnostic Detection**: Scan for ALL code types in the repository, not just Python/Terraform
 - **Simplified Re-generation**: For regeneration requests, simply delete `.cicd-docs/` and `.github/workflows/` directories before starting - ensures completely clean start
-- **Existing Workflow Management**: For new generation (not regeneration), existing workflows in `.github/workflows/` will be replaced by newly generated workflows with matching names
+- **Existing Workflow Management**: For new generation (not regeneration), existing workflows in `.github/workflows/` will be replaced by the newly generated single production workflow
 - Always generate ONLY for detected code types
-- **Orchestrator Workflows**: ALWAYS generate orchestrator workflows for consistency and simplified dependency management:
-  - `orchestrator-dev.yml` - Orchestrates all code type workflows for dev (triggers on `develop` branch push)
-  - `orchestrator-test.yml` - Orchestrates all code type workflows for test (triggers on `main` branch push)
-  - `orchestrator-prd.yml` - Orchestrates all code type workflows for prod (triggers via workflow_run after successful test orchestrator)
-- **Environment-Specific Workflows**: Generate three separate workflow files per code type:
-  - `{code-type}-dev.yml` - CI + Deploy to Dev (triggers on `develop` branch push OR via orchestrator)
-  - `{code-type}-test.yml` - CI + Deploy to Test (triggers on `main` branch push OR via orchestrator)
-  - `{code-type}-prd.yml` - CI + Deploy to Prod (triggers via workflow_run after successful test completion OR via orchestrator)
-- **Branch-Based Deployment Triggers**:
-  - Develop branch → Development environment workflow (direct push trigger)
-  - Main branch → Test environment workflow (direct push trigger)
-  - Production environment workflow (workflow_run trigger after successful test deployment completion, auto-triggered)
+- **Single Production Workflow**: Generate one unified workflow file containing all code types:
+  - `ci-cd.yml` - Single production workflow (triggers on `main` branch push only)
+  - Contains jobs for all detected code types sequenced by dependencies
+  - All deploy jobs use `environment: production`
+- **No Orchestrator Workflows**: Not needed for single workflow architecture - dependencies managed via job `needs:` within the same workflow
+- **No Multi-Environment Workflows**: Single production environment only - no dev/test/prod separation
+- **Branch-Based Deployment Trigger**:
+  - Main branch push → Single production workflow (direct push trigger)
+  - No other branch triggers
 - **Language-Specific Standards**: Read and apply complete content from `{code-type}-standards.mdc` files in `cicd-phases/` directory
 - Minimal, modular checkpoints across all phases
 - **MANDATORY**: Use the two-level checkbox tracking system (plan files + cicd-state.md)

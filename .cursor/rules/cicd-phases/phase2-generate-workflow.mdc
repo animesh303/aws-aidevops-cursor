@@ -1,5 +1,5 @@
 ---
-description: Generate single-environment GitHub Actions workflows with CI/CD, dependency handling, and artifact flow.
+description: Generate single production GitHub Actions workflow (triggered by main branch) with CI/CD, dependency handling, and artifact flow.
 alwaysApply: false
 ---
 
@@ -7,7 +7,7 @@ alwaysApply: false
 
 ## Purpose
 
-Generate GitHub Actions workflow files (YAML) for ALL detected code types as **one workflow file per code type**. Each workflow contains CI jobs and deployment job. Handle dependencies between code artifacts by enforcing workflow execution order and artifact passing. Ensure all required CI/CD and code scanning steps are present.
+Generate a **single unified production GitHub Actions workflow file** (YAML) that contains jobs for ALL detected code types. The workflow triggers on pushes to `main` branch and deploys to a single production environment. Jobs are sequenced based on dependencies - code types with no dependencies run first, followed by dependent code types. Handle dependencies between code artifacts by enforcing job execution order and artifact passing within the same workflow. Ensure all required CI/CD and code scanning steps are present.
 
 ## Plan Document Location
 
@@ -70,8 +70,8 @@ If you need to conditionally run an entire job based on file existence, either:
 
    - **For regeneration requests**: `.github/workflows/` directory should already be deleted (handled in Welcome phase), so no existing workflows to manage
    - **For new generation**: If `.github/workflows/` directory exists with files, they will be replaced with newly generated workflows
-   - **No complex removal logic needed**: Simply generate new workflow files - they will overwrite any existing files with the same names
-   - Document that new workflows are being generated (1 per code type)
+   - **No complex removal logic needed**: Simply generate a single unified workflow file - it will overwrite any existing workflow file with the same name
+   - Document that a single unified workflow is being generated containing all code types
 
 3. **Read Language-Specific Standards:**
 
@@ -80,126 +80,180 @@ If you need to conditionally run an entire job based on file existence, either:
    - If standards file does not exist, create it following the pattern of existing standards files
    - **CRITICAL**: Use the complete content from the standards file - do not summarize or paraphrase
 
-4. **Generate Workflows Per Detected Code Type:**
+4. **Calculate Execution Order Based on Dependencies:**
 
-   For each detected code type, generate **one workflow file**:
+   - **Build Dependency Graph**:
+     - Use topological sort to determine correct execution order
+     - Start with code types that have no dependencies (leaf nodes)
+     - Process code types in order: dependencies first, dependents after
+     - Example: If `terraform → python` and `kubernetes → docker → python`, order is: `[python, docker, terraform, kubernetes]`
+   - **Document Execution Order**: Store the ordered list of code types in the plan document
 
-   **Workflow** (`.github/workflows/{code-type}.yml`):
+5. **Generate Single Production Workflow:**
 
-   - **Workflow Trigger**:
+   Generate **one production workflow file** (`.github/workflows/ci-cd.yml`) that contains jobs for ALL detected code types:
 
-     - Trigger on push to `main` branch AND support `workflow_run` if dependencies exist
+   **Workflow Structure** (`.github/workflows/ci-cd.yml`):
 
+   - **Workflow Trigger** (main branch only):
      ```yaml
      on:
        push:
          branches: [main]
        workflow_dispatch:
-       workflow_run:
-         workflows: ["{Upstream Workflow Name}"]
-         types: [completed]
-         branches: [main]
      ```
+   - **Environment**: Single production environment (all deploy jobs use same environment)
 
-     - **If dependencies exist**: Add `workflow_run` trigger to wait for upstream workflows
-     - **Condition Check** (for workflow_run):
-       ```yaml
-       jobs:
-         deploy:
-           if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
-       ```
+   - **For Each Code Type (in dependency order)**, create job groups:
+     - **CI Jobs** (run in parallel for each code type):
+       - `{code-type}-lint` - Lint job
+       - `{code-type}-security` - Security scan job
+       - `{code-type}-test` - Test job
+       - These jobs can run in parallel (no dependencies between them)
+     - **Build Job** (runs after CI jobs):
+       - `{code-type}-build` - Build and package artifacts
+       - **Needs**: All CI jobs for this code type (`needs: [{code-type}-lint, {code-type}-security, {code-type}-test]`)
+       - Uploads artifacts using `actions/upload-artifact@v4`
+     - **Deploy Job** (runs after build and upstream dependencies):
+       - `{code-type}-deploy` - Deploy to environment
+       - **Needs**:
+         - All CI jobs for this code type
+         - Build job for this code type
+         - **If dependencies exist**: Deploy jobs of upstream code types (e.g., if terraform depends on python, `terraform-deploy` needs `python-deploy`)
+       - **Dependency Handling** (CRITICAL - MANDATORY if dependencies detected):
+         - **MANDATORY CHECK**: If Phase 1 detected dependencies for this code type, dependency handling steps MUST be included
+         - **Load Artifact Mapping** (PREFERRED):
+           - **CRITICAL**: Read `.code-docs/artifact-mappings.json` if it exists
+           - Extract dependency information from `mappings` array
+           - For each mapping entry:
+             - Use `artifact_name` for artifact download
+             - Use `artifact_destination_path` for artifact placement
+         - **For Terraform workflows**: If Terraform code references artifacts OR mapping file indicates dependencies, dependency handling is MANDATORY
+         - **Steps MUST include** (in this exact order):
+           1. **Download artifacts from upstream build jobs FIRST** (e.g., Lambda zip from Python build job)
+              - Use `actions/download-artifact@v4` with artifact name from upstream build job
+              - **If mapping file exists**: Use exact artifact name from mapping
+              - **If mapping file does not exist**: Use patterns from `terraform-standards.mdc` or `workflow-dependency-handling.mdc`
+           2. **Place artifacts in correct location** where deployment code expects them
+              - **If mapping file exists**: Use exact path from `artifact_destination_path` field
+              - **If mapping file does not exist**: For Terraform, if code references `lambda_function.zip`, place it where Terraform expects it
+           3. **Verify artifacts exist** before proceeding with deployment operations
+           4. **Pass artifact information** to deployment steps (environment variables, Terraform variables, etc.)
+         - **DO NOT SKIP**: If dependencies are detected, these steps are MANDATORY, not optional
+       - Deploys to environment
+       - Uses GitHub `environment` for secrets and protection rules
+       - Follow patterns from `{code-type}-standards.mdc`
 
-   - **CI Jobs**:
-
-     - Lint, test, security scan, artifact generation
-     - Organize workflow logic into multiple jobs with clear dependencies using `needs:`
-     - Prefer fast-fail by running independent jobs in parallel
-     - Build and upload artifacts
-     - Follow patterns from `{code-type}-standards.mdc`
-
-   - **Deploy Job**:
-     - **Needs**: All CI jobs must succeed
-     - **Dependency Handling** (CRITICAL - MANDATORY if dependencies detected):
-       - **MANDATORY CHECK**: If Phase 1 detected dependencies for this code type, dependency handling steps MUST be included
-       - **Load Artifact Mapping** (PREFERRED):
-         - **CRITICAL**: Read `.code-docs/artifact-mappings.json` if it exists
-         - Extract dependency information from `mappings` array
-         - For each mapping entry:
-           - Use `artifact_name` for artifact download
-           - Use `artifact_destination_path` for artifact placement
-       - **For Terraform workflows**: If Terraform code references artifacts OR mapping file indicates dependencies, dependency handling is MANDATORY
-       - **Steps MUST include** (in this exact order):
-         1. **Download artifacts from upstream workflows FIRST** (e.g., Lambda zip from Python workflow)
-            - **If mapping file exists**: Use exact artifact name from mapping
-            - **If mapping file does not exist**: Use patterns from `terraform-standards.mdc` or `workflow-dependency-handling.mdc`
-         2. **Place artifacts in correct location** where deployment code expects them
-            - **If mapping file exists**: Use exact path from `artifact_destination_path` field
-            - **If mapping file does not exist**: For Terraform, if code references `lambda_function.zip`, place it where Terraform expects it
-         3. **Verify artifacts exist** before proceeding with deployment operations
-         4. **Pass artifact information** to deployment steps (environment variables, Terraform variables, etc.)
-       - **DO NOT SKIP**: If dependencies are detected, these steps are MANDATORY, not optional
-     - Deploys to environment
-     - Uses GitHub `environment` for secrets and protection rules
-     - Downloads CI artifacts if needed for deployment
-     - **Upload deployment artifacts** for downstream workflows (if this code type is a dependency)
-     - Follow patterns from `{code-type}-standards.mdc`
-
-5. **Workflow Structure Requirements:**
+6. **Workflow Structure Requirements:**
 
    **CRITICAL**: Remember that all GitHub Actions expressions (including `hashFiles`) MUST be wrapped in `${{ }}` syntax.
 
-   - **Workflow Structure Example**:
+   - **Unified Workflow Structure Example**:
 
      ```yaml
-     name: { Code Type }
+     name: CI/CD
 
      on:
        push:
          branches: [main]
        workflow_dispatch:
-       workflow_run:
-         workflows: ["{Upstream Workflow Name}"]
-         types: [completed]
-         branches: [main]
 
      permissions:
        contents: read
        id-token: write # For OIDC if needed
 
      jobs:
-       # CI Jobs
-       lint:
+       # Python Code Type Jobs
+       python-lint:
          runs-on: ubuntu-latest
          steps:
            - uses: actions/checkout@v4
-           # ... lint steps from standards file
+           # ... lint steps from python-standards.mdc
 
-       security:
+       python-security:
          runs-on: ubuntu-latest
          steps:
            - uses: actions/checkout@v4
-           # ... security scan steps from standards file
+           # ... security scan steps from python-standards.mdc
 
-       tests:
+       python-test:
          runs-on: ubuntu-latest
          steps:
            - uses: actions/checkout@v4
            - name: Run tests
              if: ${{ hashFiles('tests/**') != '' }}
              run: |
-               # ... test steps from standards file
+               # ... test steps from python-standards.mdc
 
-       # Deployment Job
-       deploy:
-         if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'push' }}
-         needs: [lint, security, tests]
+       python-build:
+         needs: [python-lint, python-security, python-test]
          runs-on: ubuntu-latest
-         environment: default # Or custom environment name
          steps:
            - uses: actions/checkout@v4
+           # ... build steps from python-standards.mdc
+           - name: Upload Lambda package
+             uses: actions/upload-artifact@v4
              with:
-               ref: ${{ github.event.workflow_run.head_branch || github.ref }}
-           # ... deployment steps from standards file
+               name: lambda-package
+               path: lambda-package.zip
+
+       python-deploy:
+         needs: [python-build]
+         runs-on: ubuntu-latest
+         environment: production
+         steps:
+           - uses: actions/checkout@v4
+           - uses: actions/download-artifact@v4
+             with:
+               name: lambda-package
+           # ... deployment steps from python-standards.mdc
+
+       # Terraform Code Type Jobs (depends on Python)
+       terraform-lint:
+         runs-on: ubuntu-latest
+         steps:
+           - uses: actions/checkout@v4
+           # ... lint steps from terraform-standards.mdc
+
+       terraform-security:
+         runs-on: ubuntu-latest
+         steps:
+           - uses: actions/checkout@v4
+           # ... security scan steps from terraform-standards.mdc
+
+       terraform-validate:
+         runs-on: ubuntu-latest
+         steps:
+           - uses: actions/checkout@v4
+           # ... validate steps from terraform-standards.mdc
+
+       terraform-deploy:
+         needs:
+           [
+             terraform-lint,
+             terraform-security,
+             terraform-validate,
+             python-deploy,
+           ]
+         runs-on: ubuntu-latest
+         environment: production
+         steps:
+           - uses: actions/checkout@v4
+           - name: Download Lambda package from Python build
+             uses: actions/download-artifact@v4
+             with:
+               name: lambda-package
+           - name: Place Lambda package for Terraform
+             run: |
+               mkdir -p ./iac/terraform
+               cp ./lambda-package/lambda-package.zip ./iac/terraform/lambda_function.zip
+           - name: Verify Lambda package exists
+             run: |
+               if [ ! -f "./iac/terraform/lambda_function.zip" ]; then
+                 echo "Error: Lambda package not found"
+                 exit 1
+               fi
+           # ... deployment steps from terraform-standards.mdc
      ```
 
    - **AWS Credentials Configuration** (Mandatory for AWS-related workflows):
@@ -225,7 +279,7 @@ If you need to conditionally run an entire job based on file existence, either:
          branches: [main]
          paths:
            - "src/**"
-           - ".github/workflows/{code-type}.yml"
+           - ".github/workflows/ci-cd.yml"
      ```
 
    - **Concurrency Control**:
@@ -233,11 +287,11 @@ If you need to conditionally run an entire job based on file existence, either:
 
      ```yaml
      concurrency:
-       group: deploy-{code-type}-${{ github.ref }}
+       group: ci-cd-${{ github.ref }}
        cancel-in-progress: false
      ```
 
-6. **Apply Language-Specific Standards:**
+7. **Apply Language-Specific Standards:**
 
    - For each detected code type, read and apply the complete content from `{code-type}-standards.mdc`
    - Use the exact job names, steps, and patterns specified in the standards file
@@ -247,15 +301,15 @@ If you need to conditionally run an entire job based on file existence, either:
      - If dependencies exist, deployment job MUST include dependency handling steps from `terraform-standards.mdc`
    - If a standards file is missing, create it with appropriate CI/CD patterns for that code type
 
-7. **Document Dependency Handling:**
+8. **Document Dependency Handling:**
 
    - For each dependency relationship identified in Phase 1:
-     - Document which upstream workflow must complete first
-     - Document which downstream workflow waits for it
-     - Document what artifacts are passed between workflows
-     - Document how artifacts are passed (GitHub Actions artifacts)
+     - Document which upstream job must complete first
+     - Document which downstream job waits for it
+     - Document what artifacts are passed between jobs
+     - Document how artifacts are passed (GitHub Actions artifacts within same workflow)
 
-8. **Validate Workflow Linting and Dependency Handling (MANDATORY):**
+9. **Validate Workflow Linting and Dependency Handling (MANDATORY):**
 
    - **CRITICAL**: Before presenting preview, validate all generated workflow files for linting errors:
      - Check YAML syntax validity
@@ -265,31 +319,34 @@ If you need to conditionally run an entire job based on file existence, either:
      - Verify workflow trigger syntax is correct
      - Check environment names are valid
      - Verify artifact paths and names are correct
-   - **CRITICAL - Dependency Handling Validation** (MANDATORY for Terraform workflows):
-     - **For each Terraform workflow generated**:
+   - **CRITICAL - Dependency Handling Validation** (MANDATORY for Terraform jobs):
+     - **For Terraform deploy job**:
        - Check if Terraform code references artifacts (scan `.tf` files for `filename = "*.zip"`, etc.)
        - Check Phase 1 dependency map for Terraform dependencies
-       - **If dependencies detected**: Verify deployment job includes ALL mandatory dependency handling steps
+       - **If dependencies detected**: Verify deploy job includes ALL mandatory dependency handling steps AND has correct `needs:` dependencies
        - **If dependencies detected but steps missing**: Add missing steps immediately - DO NOT proceed without them
+       - **Verify job dependencies**: Ensure `needs:` includes upstream deploy jobs (e.g., `terraform-deploy` needs `python-deploy`)
    - **If linting errors are found**: Fix them immediately before proceeding
    - **If dependency handling steps are missing**: Add them immediately before proceeding
    - **DO NOT proceed to preview if workflows have linting errors OR missing dependency handling steps**
 
-9. **Present Workflow YAML Preview:**
+10. **Present Workflow YAML Preview:**
 
-   - Show summarized YAML contents for all generated workflow files:
-     - `{code-type}.yml` for each detected code type
-   - Include key jobs (CI jobs + deployment job), triggers, environments, permissions, and artifact passing
-   - **Highlight dependency handling**:
-     - Show artifact download/upload steps
-     - Show how artifacts are passed to deployment steps
-   - List any workflows that were modified or removed
-   - **Show dependency graph**: Visual representation of which workflows depend on others
-   - **Show execution order**: Show the execution order determined by dependencies
-   - **Confirm linting validation**: State that all workflows have been validated and are free of linting errors
+    - Show summarized YAML contents for the single unified workflow file:
+      - `ci-cd.yml` - Single unified workflow containing all code types
+    - Include key jobs for each code type (CI jobs + build job + deployment job), triggers, environments, permissions, and artifact passing
+    - **Highlight dependency handling**:
+      - Show artifact download/upload steps between jobs
+      - Show how artifacts are passed from upstream build jobs to downstream deploy jobs
+      - Show job dependencies using `needs:` to enforce execution order
+    - List any workflows that were modified or removed
+    - **Show dependency graph**: Visual representation of which code types depend on others
+    - **Show execution order**: Show the execution order of code types determined by dependencies
+    - **Show job structure**: Show how each code type has lint/security/test jobs (parallel), build job (after CI), and deploy job (after build and upstream deploys)
+    - **Confirm linting validation**: State that the workflow has been validated and is free of linting errors
 
-10. **Checkpoint:**
-    - Prompt user to confirm: "Proceed to generate CI/CD workflows for all detected code types?"
+11. **Checkpoint:**
+    - Prompt user to confirm: "Proceed to generate single production CI/CD workflow (triggered by main branch) for all detected code types?"
     - Wait for confirmation.
     - **Update plan checkboxes** - Mark completed steps [x] in `.cicd-docs/workflow-generation-plan.md`
-    - **Update cicd-state.md** - Update Phase 2 status and generated files list
+    - **Update cicd-state.md** - Update Phase 2 status and generated files list (should show: `.github/workflows/ci-cd.yml`)

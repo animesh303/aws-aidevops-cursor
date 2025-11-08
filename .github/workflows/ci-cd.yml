@@ -1,0 +1,306 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Python CI Jobs
+  python-lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('src/lambda-python-s3-lambda-trigger/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Install dependencies
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Run Flake8
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          pip install flake8
+          flake8 . || true
+
+  python-security:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('src/lambda-python-s3-lambda-trigger/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Install dependencies
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Run Bandit
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          pip install bandit
+          bandit -r . || true
+
+  python-tests:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('src/lambda-python-s3-lambda-trigger/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Install dependencies
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Install test dependencies
+        run: |
+          pip install pytest pytest-cov
+      - name: Run tests
+        if: ${{ hashFiles('tests/**') != '' }}
+        run: |
+          pytest tests/ --cov=. --cov-report=xml --cov-report=html || true
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.python-version }}
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 1
+
+  # Python Build Job
+  python-build:
+    needs: [python-lint, python-security, python-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('src/lambda-python-s3-lambda-trigger/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      - name: Install dependencies
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Build Lambda package
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          zip -r lambda-package.zip . -x "*.git*" "*.md" "tests/*"
+      - name: Upload Lambda package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lambda-package
+          path: src/lambda-python-s3-lambda-trigger/lambda-package.zip
+          retention-days: 1
+
+  # Python Deploy Job
+  python-deploy:
+    needs: [python-build]
+    runs-on: ubuntu-latest
+    if: always()
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Download Lambda package
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-package
+      - name: Deploy Lambda function
+        run: |
+          aws lambda update-function-code \
+            --function-name s3-lambda-trigger-hello-world \
+            --zip-file fileb://lambda-package/lambda-package.zip || \
+          aws lambda create-function \
+            --function-name s3-lambda-trigger-hello-world \
+            --runtime python3.12 \
+            --role ${{ secrets.AWS_LAMBDA_ROLE_ARN }} \
+            --handler lambda_handler.lambda_handler \
+            --zip-file fileb://lambda-package/lambda-package.zip \
+            --memory-size 128
+
+  # Terraform CI Jobs
+  terraform-security:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Checkov
+        working-directory: iac/terraform
+        run: |
+          pip install checkov
+          checkov -d . || true
+
+  terraform-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ~1.1
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Configure Terraform Cloud
+        working-directory: iac/terraform
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+        run: |
+          cat > $HOME/.terraformrc << EOF
+          credentials "app.terraform.io" {
+            token = "$TFC_TOKEN"
+          }
+          EOF
+      - name: Terraform Init
+        working-directory: iac/terraform
+        run: terraform init -backend=false
+      - name: Terraform Validate
+        working-directory: iac/terraform
+        run: terraform validate
+      - name: Terraform Format
+        working-directory: iac/terraform
+        run: terraform fmt
+
+  # Terraform Deploy Job
+  terraform-deploy:
+    needs: [terraform-security, terraform-validate, python-deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download Lambda package from Python build job
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        id: download-artifact
+        with:
+          name: lambda-package
+          path: ./lambda-package
+      - name: Verify artifact downloaded successfully
+        if: steps.download-artifact.outcome != 'success'
+        run: |
+          echo "Error: Failed to download artifact 'lambda-package' from Python build job"
+          exit 1
+      - name: Move Lambda package to Terraform directory
+        run: |
+          mkdir -p ./iac/terraform
+          cp ./lambda-package/lambda-package.zip ./iac/terraform/lambda_function.zip
+          echo "TF_VAR_lambda_package_path=$(pwd)/iac/terraform/lambda_function.zip" >> $GITHUB_ENV
+      - name: Verify Lambda package exists
+        run: |
+          TERRAFORM_LAMBDA_PATH="./iac/terraform/lambda_function.zip"
+          if [ ! -f "$TERRAFORM_LAMBDA_PATH" ]; then
+            echo "Error: Lambda package not found at: $TERRAFORM_LAMBDA_PATH"
+            echo "Downloaded artifacts location:"
+            ls -la ./lambda-package/ || echo "lambda-package directory not found"
+            exit 1
+          fi
+          echo "✓ Lambda package verified at: $TERRAFORM_LAMBDA_PATH"
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ~1.1
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Configure Terraform Cloud
+        working-directory: iac/terraform
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+        run: |
+          cat > $HOME/.terraformrc << EOF
+          credentials "app.terraform.io" {
+            token = "$TFC_TOKEN"
+          }
+          EOF
+      - name: Detect Terraform Cloud backend
+        working-directory: iac/terraform
+        id: detect-tfc
+        run: |
+          if grep -q "cloud" backend.tf 2>/dev/null || [ -n "$TFC_TOKEN" ]; then
+            echo "USE_TFC=true" >> $GITHUB_ENV
+            echo "Terraform Cloud backend detected"
+          else
+            echo "USE_TFC=false" >> $GITHUB_ENV
+            echo "Standard backend detected"
+          fi
+      - name: Terraform Init
+        working-directory: iac/terraform
+        run: terraform init
+      - name: Terraform Plan
+        working-directory: iac/terraform
+        run: terraform plan -out=tfplan
+      - name: Terraform Apply
+        working-directory: iac/terraform
+        run: terraform apply -auto-approve
+

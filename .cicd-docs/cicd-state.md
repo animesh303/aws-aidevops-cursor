@@ -3,7 +3,7 @@
 ## Current Status
 
 - **Current Phase**: commit-push
-- **Last Updated**: 2025-01-28T16:35:00Z
+- **Last Updated**: 2025-01-28T17:00:00Z
 - **Is Regeneration**: true
 
 ## Detected Code Types
@@ -24,14 +24,9 @@
     "code_type": "terraform",
     "depends_on": "python",
     "artifacts": ["lambda_function.zip"],
-    "artifact_name": "s3-lambda-trigger-package-{env}",
+    "artifact_name": "lambda-package",
     "artifact_source_path": "src/lambda-python-s3-lambda-trigger",
-    "artifact_destination_path": "iac/terraform/lambda_function.zip",
-    "environment_artifacts": {
-      "dev": "s3-lambda-trigger-package-dev",
-      "test": "s3-lambda-trigger-package-test",
-      "prd": "s3-lambda-trigger-package-prd"
-    }
+    "artifact_destination_path": "iac/terraform/lambda_function.zip"
   }
 ]
 ```
@@ -47,19 +42,11 @@
 
 - **`.github/workflows/` directory**: Does not exist (regenerated)
 - **Existing workflows**: None
-- **Action**: Create new workflows
+- **Action**: Create new single production workflow
 
 ## Generated Files
 
-- `.github/workflows/orchestrator-dev.yml`
-- `.github/workflows/orchestrator-test.yml`
-- `.github/workflows/orchestrator-prd.yml`
-- `.github/workflows/python-dev.yml`
-- `.github/workflows/python-test.yml`
-- `.github/workflows/python-prd.yml`
-- `.github/workflows/terraform-dev.yml`
-- `.github/workflows/terraform-test.yml`
-- `.github/workflows/terraform-prd.yml`
+- `.github/workflows/ci-cd.yml` - Single production workflow containing all code types
 
 ## Phase Checkboxes
 
@@ -70,6 +57,5 @@
 
 ## Notes
 
-- Dependencies detected from artifact-mappings.json
-- Terraform requires Python Lambda package before deployment
-- Orchestrator workflows will be generated for all environments
+- Starting fresh regeneration for single production workflow pattern
+

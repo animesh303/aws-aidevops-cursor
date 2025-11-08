@@ -1,5 +1,5 @@
 ---
-description: Scan and analyze code, dependencies, and workflows to design a single-environment CI/CD plan.
+description: Scan and analyze code, dependencies, and workflows to design a single production CI/CD workflow plan (triggered by main branch).
 alwaysApply: false
 ---
 
@@ -7,11 +7,12 @@ alwaysApply: false
 
 ## Purpose
 
-Scan repository for ALL code types (Python, Terraform, JavaScript, Java, Go, Docker, Kubernetes, etc.), load and analyze requirements files to understand dependencies, analyze existing workflows, and create a plan for single-environment CI/CD workflows.
+Scan repository for ALL code types (Python, Terraform, JavaScript, Java, Go, Docker, Kubernetes, etc.), load and analyze requirements files to understand dependencies, analyze existing workflows, and create a plan for a single production CI/CD workflow triggered by main branch changes.
 
 ## Plan Document Location
 
 Plan documents are created in `.cicd-docs/` directory:
+
 - Detection plan: `.cicd-docs/detection-plan.md`
 - Workflow generation plan: `.cicd-docs/workflow-generation-plan.md`
 - Review notes: `.cicd-docs/review-notes.md`
@@ -21,11 +22,13 @@ Plan documents are created in `.cicd-docs/` directory:
 1. **Load Requirements Files for Dependency Analysis:**
 
    - **Scan for Requirements Files**:
+
      - Check `.code-docs/requirements/` directory
      - Check `.requirements/` directory (alternative location)
      - Load all `*_requirements.md`, `*-analysis.md`, and `*-code-analysis.md` files
 
    - **Extract Dependency Information**:
+
      - Read requirements files to understand relationships between code artifacts
      - Identify dependencies: e.g., "Terraform infrastructure depends on Python Lambda deployment package"
      - Map dependencies using structured format: `{code-type: "terraform", depends_on: "python", artifacts: ["lambda-package.zip"]}`
@@ -68,6 +71,7 @@ Plan documents are created in `.cicd-docs/` directory:
 5. **Analyze Code Dependencies:**
 
    - **Load Artifact Mapping** (PREFERRED METHOD):
+
      - **CRITICAL**: First check if `.code-docs/artifact-mappings.json` exists
      - If mapping file exists:
        - Read and parse the JSON file
@@ -77,6 +81,7 @@ Plan documents are created in `.cicd-docs/` directory:
      - If mapping file does not exist, fall back to code analysis (below)
 
    - **Build Dependency Map**:
+
      - For each code type, identify what it depends on (from requirements analysis AND code analysis)
      - **Code Analysis for Dependencies** (FALLBACK if mapping file not available):
        - **Terraform Code Analysis**: Scan all `.tf` files for artifact references:
@@ -91,33 +96,41 @@ Plan documents are created in `.cicd-docs/` directory:
      - Identify artifact requirements: what artifacts need to be produced and consumed
 
    - **Workflow Dependency Requirements**:
-     - Determine which workflows must wait for others using `workflow_run` triggers
-     - Identify which artifacts need to be uploaded/downloaded between workflows
+     - Determine which jobs must wait for others using `needs:` dependencies
+     - Identify which artifacts need to be uploaded/downloaded between jobs
      - **When Using Mapping File**: Use exact artifact names from mapping
      - Document artifact passing requirements (e.g., Lambda zip file path, Docker image tag)
-     - **MANDATORY**: If dependencies are detected, they MUST be implemented in workflows
+     - **MANDATORY**: If dependencies are detected, they MUST be implemented as job dependencies in the unified workflow
 
-6. **Draft Single-Environment Workflow Plan:**
+6. **Draft Single Production Workflow Plan:**
 
-   For each detected code type, plan **one workflow file**:
-   - **Workflow** (`{code-type}.yml`):
-     - Triggers on pushes to `main` branch (and `workflow_dispatch` for manual trigger)
-     - Contains CI jobs (lint, test, security scan, artifact generation) + Deploy job
-     - Uses GitHub `environment` for secrets
+   Plan **one unified production workflow file** (`.github/workflows/ci-cd.yml`) that contains jobs for ALL detected code types:
+
+   - **Unified Production Workflow** (`ci-cd.yml`):
+     - **Trigger**: Pushes to `main` branch (and `workflow_dispatch` for manual trigger)
+     - **Environment**: Single production environment only
+     - Contains jobs for each code type sequenced by dependencies
+     - Each code type has: CI jobs (lint, security, test), build job, and deploy job
+     - Uses GitHub `environment` for production secrets and protection rules
 
    **Document Dependency Handling:**
+
    - For each dependency relationship, specify:
-     - Which workflow must complete first (upstream)
-     - Which workflow depends on it (downstream)
+     - Which code type must complete first (upstream)
+     - Which code type depends on it (downstream)
      - What artifacts need to be passed (e.g., Lambda zip file, Docker image tag)
-     - How artifacts will be passed (GitHub Actions artifacts)
-     - Example: "Terraform workflow must wait for Python workflow to complete and upload Lambda zip artifact"
+     - How artifacts will be passed (GitHub Actions artifacts within same workflow)
+     - Example: "Terraform deploy job must wait for Python deploy job to complete and download Lambda zip artifact from Python build job"
+   - **Calculate Execution Order**: Use topological sort to determine the order of code types
+     - Code types with no dependencies run first
+     - Dependent code types run after their dependencies
 
    Document workflow modifications:
+
    - List existing workflows that need modification
    - List existing workflows that should be removed
-   - List new workflows that need to be created (1 per code type)
-   - Document dependency-based workflow triggers and artifact passing
+   - List new unified workflow that needs to be created (1 file: `ci-cd.yml`)
+   - Document job dependencies using `needs:` to enforce execution order
 
 7. **User Plan Review Checkpoint:**
 
@@ -125,11 +138,13 @@ Plan documents are created in `.cicd-docs/` directory:
      - All detected code types with locations
      - Requirements and dependencies identified
      - Dependency map (which code types depend on others)
-     - Workflow dependency order (which workflows must run before others)
+     - Job dependency order (which jobs must run before others)
      - Existing workflows analysis (keep/modify/remove)
-     - Planned workflows (1 per code type)
-     - Artifact passing strategy (how dependencies will be handled between workflows)
-   - Ask: "Proceed to generate workflow files as planned?"
+     - Planned single production workflow (1 file: `ci-cd.yml` containing all code types)
+     - Execution order of code types (based on dependencies)
+     - Artifact passing strategy (how dependencies will be handled between jobs in same workflow)
+     - **Environment**: Single production environment (triggered by main branch)
+   - Ask: "Proceed to generate single production workflow as planned?"
    - Wait for confirmation to proceed.
 
 8. **Persist Phase Results (State & Audit):**

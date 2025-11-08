@@ -1,12 +1,13 @@
 ---
-description: Define CI/CD workflow patterns and standards for Python code in unified workflow files.
+description: Define CI/CD workflow patterns and standards for Python code in single production workflow.
 alwaysApply: false
 ---
+
 # Python CI/CD Workflow Standards
 
 ## Purpose
 
-Define CI/CD workflow patterns and standards for Python code in unified workflow files.
+Define CI/CD workflow patterns and standards for Python code in single production workflow (triggered by main branch).
 
 ## CI Jobs
 
@@ -62,89 +63,43 @@ Define CI/CD workflow patterns and standards for Python code in unified workflow
     ```
   - Upload coverage artifacts (coverage.xml, htmlcov/) - use `if: always()` to upload even if tests fail
 
-## Deployment Jobs
+## Build Job
 
-**Note**: Each environment has its own workflow file. The deployment job below applies to the corresponding environment workflow.
-
-### Deploy to Dev (in `python-dev.yml`)
-
-- **Name**: `deploy-dev`
-- **Needs**: All CI jobs (lint, security, tests)
-- **Condition**: `if: always()` - runs even if CI jobs fail (since CI jobs use `continue-on-error: true`)
-- **Environment**: `dev`
-- **Workflow Trigger**: `on.push.branches: [develop]`
+- **Name**: `python-build`
+- **Needs**: All CI jobs (`python-lint`, `python-security`, `python-test`)
 - **Steps**:
-  - Configure AWS credentials via OIDC (if needed)
-  - Download build artifacts if needed
+  - Setup Python
+  - Cache pip dependencies
+  - Install dependencies
   - **Build Lambda deployment package** (if applicable):
     ```yaml
     - name: Build Lambda package
       run: |
         zip -r lambda-package.zip . -x "*.git*" "*.md" "tests/*"
     ```
-  - Deploy to development environment
-  - Use environment-specific secrets and variables
-  - **Upload artifacts for downstream workflows** (if this Python code is a dependency):
+  - **Upload artifacts for downstream jobs** (if this Python code is a dependency):
     ```yaml
     - name: Upload Lambda package artifact
       uses: actions/upload-artifact@v4
       with:
-        name: lambda-package-dev
+        name: lambda-package
         path: lambda-package.zip
         retention-days: 1
     ```
-    - Or upload to S3/container registry for cross-workflow access
-    - Export artifact location (path/URL) as workflow output or environment variable
 
-### Deploy to Test (in `python-test.yml`)
+## Deployment Job
 
-- **Name**: `deploy-test`
-- **Needs**: All CI jobs (within the test workflow: lint, security, tests)
+- **Name**: `python-deploy`
+- **Needs**: Build job (`python-build`) and all CI jobs
 - **Condition**: `if: always()` - runs even if CI jobs fail (since CI jobs use `continue-on-error: true`)
-- **Environment**: `test`
-- **Workflow Trigger**: `push` to `main` branch
+- **Environment**: `production`
+- **Workflow Trigger**: `push` to `main` branch only
 - **Steps**:
-  - Checkout code (standard checkout for push trigger)
+  - Checkout code
   - Configure AWS credentials via OIDC (if needed)
-  - Run CI jobs (lint, security, tests)
-  - **Build Lambda deployment package** (if applicable)
-  - Download artifacts if needed
-  - Deploy to test environment
-  - Use environment-specific secrets and variables
-  - **Upload artifacts for downstream workflows** (if this Python code is a dependency):
-    ```yaml
-    - name: Upload Lambda package artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: lambda-package-test
-        path: lambda-package.zip
-        retention-days: 1
-    ```
-
-### Deploy to Prod (in `python-prd.yml`)
-
-- **Name**: `deploy-prod`
-- **Needs**: All CI jobs (within the prod workflow: lint, security, tests)
-- **Condition**: `if: ${{ github.event.workflow_run.conclusion == 'success' }}` - runs if test workflow succeeded (CI jobs use `continue-on-error: true` so they won't block deployment)
-- **Environment**: `prod`
-- **Workflow Trigger**: `workflow_run` on successful completion of `python-test.yml` with `branches: [main]`
-- **Steps**:
-  - Checkout code: `ref: ${{ github.event.workflow_run.head_branch }}` (required for workflow_run triggers)
-  - Configure AWS credentials via OIDC (if needed)
-  - Run CI jobs (lint, security, tests)
-  - **Build Lambda deployment package** (if applicable)
-  - Download artifacts if needed
+  - Download build artifacts if needed (from build job)
   - Deploy to production environment
-  - Use environment-specific secrets and variables
-  - **Upload artifacts for downstream workflows** (if this Python code is a dependency):
-    ```yaml
-    - name: Upload Lambda package artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: lambda-package-prod
-        path: lambda-package.zip
-        retention-days: 1
-    ```
+  - Use production environment secrets and variables
   - Protected with GitHub environment protection rules
 
 ## Permissions
@@ -157,16 +112,17 @@ Define CI/CD workflow patterns and standards for Python code in unified workflow
 - Cache pip dependencies for faster builds
 - Use matrix strategy for multiple Python versions
 - Conditional test execution based on `tests/` directory existence
-- Artifact upload/download for deployment jobs
-- Environment-specific configuration via GitHub environments
+- Artifact upload in build job, download in deploy job (within same workflow)
+- Production environment configuration via GitHub environments
 - **Non-blocking CI jobs**: All CI jobs (lint, security, tests) use `continue-on-error: true` to allow workflow to proceed even if CI checks fail
-- **Deployment always runs**: Deployment jobs use `if: always()` condition to ensure they run regardless of CI job outcomes
+- **Deployment always runs**: Deployment job uses `if: always()` condition to ensure it runs regardless of CI job outcomes
 
 ## Dependency Handling
 
 **When Python code is a dependency for other code types** (e.g., Terraform needs Lambda package):
 
-- **Build and Package**: Create Lambda deployment package (zip file) in deployment jobs
-- **Upload Artifacts**: Upload packages using `actions/upload-artifact@v4` with environment-specific names
-- **Artifact Naming**: Use standardized naming convention: `{artifact-type}-{environment}` (e.g., `lambda-package-dev`, `lambda-package-test`, `lambda-package-prod`)
-- **Export Information**: Make artifact paths/URLs available to downstream workflows via workflow outputs or environment variables
+- **Build and Package**: Create Lambda deployment package (zip file) in build job
+- **Upload Artifacts**: Upload packages using `actions/upload-artifact@v4` in build job
+- **Artifact Naming**: Use simple, consistent naming: `lambda-package` (no environment suffix needed for single workflow)
+- **Download in Downstream Jobs**: Downstream deploy jobs (e.g., `terraform-deploy`) download artifacts from build job using `actions/download-artifact@v4`
+- **Artifact Passing**: All artifact passing happens within the same workflow using GitHub Actions artifacts

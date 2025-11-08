@@ -2,6 +2,7 @@
 description: CICD Workflow Generation Rules Index
 alwaysApply: false
 ---
+
 ## Phase Files
 
 ### `phase1-detect-plan.mdc`
@@ -90,7 +91,6 @@ alwaysApply: false
 - Best practices
 
 **Use When**: Implementing dependencies between code artifacts
-
 
 ### `error-handling.mdc`
 
@@ -249,7 +249,7 @@ alwaysApply: false
 
 ### `.github/workflows/` Directory
 
-- `{code-type}.yml` - One workflow per code type (single environment)
+- `ci-cd.yml` - Single production workflow containing all code types (triggered by main branch, jobs sequenced by dependencies)
 
 ---
 
