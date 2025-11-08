@@ -1,45 +1,86 @@
-# Phase 2: Workflow Generation Plan
+# CI/CD Workflow Generation Plan
 
-## Steps
+## Phase 2: Generate Workflows
 
-- [x] Load Dependency Information from Phase 1
-- [x] Verify Clean State
-- [x] Read Language-Specific Standards
-- [x] Calculate Execution Order Based on Dependencies
-- [x] Generate Single Production Workflow
-- [x] Apply Language-Specific Standards
-- [x] Document Dependency Handling
-- [x] Validate Workflow Linting and Dependency Handling
-- [ ] Present Workflow YAML Preview
-- [ ] Checkpoint
+### Step 1: Load Dependency Information from Phase 1 ✅
 
-## Execution Order
+**Dependency Map Loaded:**
+- Terraform → Python (artifact dependency)
+- Python deploy → Terraform deploy (infrastructure dependency)
 
-Based on dependency analysis:
+**Artifact Requirements:**
+- Lambda package: `lambda_function.zip`
+- Source: `src/lambda-python-s3-lambda-trigger`
+- Destination: `iac/terraform/lambda_function.zip`
 
-1. **Python CI Jobs** (parallel):
-   - `python-lint`
-   - `python-security`
-   - `python-test`
+### Step 2: Verify Clean State ✅
 
-2. **Python Build Job**:
-   - `python-build` - Builds Lambda package directly in `iac/terraform/lambda_function.zip` (PREFERRED approach)
+- `.github/workflows/` directory: Does not exist (regenerated)
+- No existing workflows to manage
+- **Action**: Create new single unified workflow file
 
-3. **Terraform CI Jobs** (parallel):
-   - `terraform-security`
-   - `terraform-validate`
+### Step 3: Read Language-Specific Standards ✅
 
-4. **Terraform Deploy Job**:
-   - `terraform-deploy` - Depends on Python build (needs Lambda package) and Terraform CI jobs
-   - Uses Lambda package from `iac/terraform/lambda_function.zip`
-   - Terraform manages Lambda function deployment (no separate python-deploy needed)
+**Standards Files Loaded:**
+- `.cursor/rules/cicd-phases/python-standards.mdc` ✅
+- `.cursor/rules/cicd-phases/terraform-standards.mdc` ✅
 
-## Dependency Handling Strategy
+### Step 4: Calculate Execution Order Based on Dependencies ✅
 
-**PREFERRED - Local Build Placement**:
-- Python build job builds Lambda package directly in `iac/terraform/lambda_function.zip`
-- Terraform deploy job uses the package directly from that location
-- No artifact upload/download needed
-- Terraform's `source_code_hash` automatically detects changes and updates Lambda function code
-- No separate `python-deploy` job needed (Terraform handles Lambda deployment)
+**Execution Order:**
+1. Python CI jobs (lint, security, test) - parallel
+2. Python build - after CI jobs
+3. Terraform CI jobs (security, validate) - parallel
+4. Terraform deploy - after Terraform CI jobs AND Python build
+5. Python deploy - NOT NEEDED (Terraform manages Lambda source)
+
+### Step 5: Generate Single Production Workflow ✅
+
+**Workflow File**: `.github/workflows/ci-cd.yml`
+
+**Structure:**
+- Trigger: `push` to `main` branch + `workflow_dispatch`
+- Environment: `production`
+- Jobs:
+  - Python: lint, security, test (parallel), build
+  - Terraform: security, validate (parallel), deploy
+  - Dependencies: terraform-deploy needs python-build
+
+**Dependency Handling:**
+- PREFERRED: Local Build Placement
+- Python build creates `lambda_function.zip` directly in `iac/terraform/`
+- Terraform deploy uses artifact directly (no upload/download needed)
+
+### Step 6: Workflow Structure Requirements ✅
+
+- All expressions use `${{ }}` syntax ✅
+- AWS OIDC configuration for Terraform jobs ✅
+- Concurrency control ✅
+- Proper permissions ✅
+
+### Step 7: Apply Language-Specific Standards ✅
+
+- Apply Python standards for Python jobs ✅
+- Apply Terraform standards for Terraform jobs ✅
+- Include dependency handling steps ✅
+
+### Step 8: Document Dependency Handling ✅
+
+- Document artifact passing strategy ✅
+- Document job dependencies ✅
+
+### Step 9: Validate Workflow Linting and Dependency Handling ✅
+
+- Validate YAML syntax ✅
+- Validate GitHub Actions expressions ✅
+- Check for job-level hashFiles() usage (BLOCKING ERROR) ✅ - No job-level usage found
+- Verify dependency handling steps are present ✅
+
+### Step 10: Present Workflow YAML Preview ⏳
+
+**To be completed after workflow generation**
+
+### Step 11: Checkpoint ⏳
+
+**To be completed after user confirmation**
 

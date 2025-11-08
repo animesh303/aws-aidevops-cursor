@@ -68,7 +68,6 @@ jobs:
     name: Python Tests
     runs-on: ubuntu-latest
     continue-on-error: true
-    if: ${{ hashFiles('tests/**') != '' }}
     strategy:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
@@ -86,9 +85,11 @@ jobs:
             pip install -r requirements.txt
           fi
       - name: Install test dependencies
+        if: ${{ hashFiles('tests/**') != '' }}
         run: |
           pip install pytest pytest-cov
       - name: Run tests
+        if: ${{ hashFiles('tests/**') != '' }}
         working-directory: .
         run: |
           pytest tests/ --cov=. --cov-report=xml --cov-report=html || true

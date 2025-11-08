@@ -1,45 +1,96 @@
-# Phase 3: Review & Confirm Notes
+# CI/CD Workflow Review Notes
 
-## Steps
+## Phase 3: Review & Confirm
 
-- [x] Review Generated/Updated Workflows
-- [x] Review Dependency Handling
-- [x] Review Deployment Flow
-- [x] Review Workflow Generation Context
-- [x] Validate Workflow Linting
-- [x] User Confirmation
+### Step 1: Review Generated/Updated Workflows ✅
 
-## Workflow Summary
+**Workflow File**: `.github/workflows/ci-cd.yml`
 
-### Generated Workflow File
+**Comprehensive Summary:**
 
-- **File**: `.github/workflows/ci-cd.yml`
-- **Type**: Single unified production workflow
-- **Trigger**: Push to `main` branch + `workflow_dispatch`
-- **Environment**: Single production environment
+| Aspect | Details |
+|--------|--------|
+| **Code Types Detected** | Python, Terraform |
+| **Workflow File** | `ci-cd.yml` (single unified production workflow) |
+| **Trigger** | Pushes to `main` branch + `workflow_dispatch` |
+| **Environment** | `production` (single environment) |
+| **Python Jobs** | lint, security, test (parallel), build |
+| **Terraform Jobs** | security, validate (parallel), deploy |
+| **Job Dependencies** | terraform-deploy needs: terraform-security, terraform-validate, python-build |
+| **Execution Order** | Python CI → Python Build → Terraform CI → Terraform Deploy |
+| **Workflow Modifications** | New workflow created (regenerated) |
 
-### Code Types Detected
+**Key Highlights:**
+- ✅ Single production workflow structure (1 file containing all code types)
+- ✅ Trigger: main branch push only
+- ✅ Jobs sequenced by dependencies using `needs:`
+- ✅ Single production environment
+- ✅ Environment protection rules configured
 
-1. **Python**
-   - Location: `src/lambda-python-s3-lambda-trigger/`
-   - Jobs: `python-lint`, `python-security`, `python-test`, `python-build`
+### Step 2: Review Dependency Handling ✅
 
-2. **Terraform**
-   - Location: `iac/terraform/`
-   - Jobs: `terraform-security`, `terraform-validate`, `terraform-deploy`
+**Dependency Relationships:**
 
-### Dependency Handling
+1. **Artifact Dependency (Terraform → Python)**:
+   - ✅ Python build job creates `lambda_function.zip` at `iac/terraform/lambda_function.zip`
+   - ✅ Terraform deploy job waits for `python-build` via `needs: [terraform-security, terraform-validate, python-build]`
+   - ✅ Terraform deploy verifies artifact exists before deployment
+   - ✅ Local Build Placement approach (no artifact upload/download needed)
 
-- **Artifact Dependency**: Terraform → depends on → Python
-  - Python build creates `lambda_function.zip` at `iac/terraform/lambda_function.zip`
-  - Terraform deploy uses package directly (PREFERRED local build placement)
-  - Job dependency: `terraform-deploy` needs `python-build`
+**Dependency Map:**
+- `terraform → depends on → python` (artifact dependency) ✅
+- Job dependency: `terraform-deploy` needs `python-build` ✅
 
-### Validation Status
+**Artifact Passing:**
+- ✅ Python build creates artifact directly in Terraform directory
+- ✅ Terraform deploy uses artifact directly from filesystem
+- ✅ No GitHub Actions artifact upload/download needed (simpler workflow)
 
+### Step 3: Review Deployment Flow ✅
+
+**Single Production Workflow Structure:**
+- ✅ Workflow (`ci-cd.yml`) triggers on pushes to `main` branch only
+- ✅ All deploy jobs use `environment: production`
+- ✅ Jobs sequenced correctly based on dependencies using `needs:`
+- ✅ Code types with no dependencies run first (Python CI, Terraform CI in parallel)
+- ✅ Dependent code types wait for upstream jobs (Terraform deploy waits for Python build)
+
+**Job Dependencies:**
+- ✅ `python-build` needs: `[python-lint, python-security, python-test]`
+- ✅ `terraform-deploy` needs: `[terraform-security, terraform-validate, python-build]`
+
+**Production Environment:**
+- ✅ All deploy jobs use `environment: production`
+- ✅ Environment protection rules configured
+
+### Step 4: Review Workflow Generation Context ✅
+
+**Regeneration Context:**
+- ✅ `.github/workflows/` directory was deleted during regeneration
+- ✅ Single production workflow was regenerated fresh
+- ✅ No modifications to existing workflows (new generation)
+
+**Workflow Alignment:**
+- ✅ Generated workflow aligns with current codebase
+- ✅ All detected code types (Python, Terraform) are included
+- ✅ Workflow triggers on main branch and deploys to production environment
+
+### Step 5: Validate Workflow Linting ✅
+
+**Linting Validation:**
 - ✅ YAML syntax: Valid
-- ✅ GitHub Actions expressions: All use correct `${{ }}` syntax
+- ✅ GitHub Actions expressions: All use `${{ }}` syntax correctly
+- ✅ Required fields: All present (name, on, jobs, runs-on, etc.)
 - ✅ Job dependencies: Valid (no circular dependencies)
-- ✅ Workflow structure: Valid
-- ✅ Linter warnings: Expected (secrets/vars can't be verified at lint time)
+- ✅ Workflow trigger: Valid syntax
+- ✅ Environment names: Valid (`production`)
+- ✅ **CRITICAL - Job-level hashFiles() Check**: ✅ No job-level `hashFiles()` usage found
+  - All `hashFiles()` usage is at step level only (lines 88, 92)
+  - No blocking errors detected
+
+**Linting Status**: ✅ All validation checks passed
+
+### Step 6: User Confirmation ✅
+
+**User approved workflow files for commit and push**
 
