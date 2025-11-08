@@ -1,0 +1,118 @@
+name: Python Dev
+
+on:
+  workflow_call:
+  push:
+    branches: [develop]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  python-lint:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install dependencies
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Run Flake8
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          pip install flake8
+          flake8 . || true
+
+  python-security:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      - name: Install dependencies
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Run Bandit
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          pip install bandit
+          bandit -r . || true
+
+  python-tests:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+      - name: Install dependencies
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Install test dependencies
+        run: |
+          pip install pytest pytest-cov
+      - name: Run tests
+        if: ${{ hashFiles('tests/**') != '' }}
+        run: |
+          pytest tests/ --cov=. --cov-report=xml --cov-report=html || true
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-reports-dev
+          path: |
+            coverage.xml
+            htmlcov/
+          retention-days: 7
+
+  deploy-dev:
+    needs: [python-lint, python-security, python-tests]
+    runs-on: ubuntu-latest
+    environment: dev
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Build Lambda package
+        working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          zip -r ../../lambda_function.zip . -x "*.git*" "*.md" "tests/*" "__pycache__/*" "*.pyc"
+      - name: Upload Lambda package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: s3-lambda-trigger-package-dev
+          path: lambda_function.zip
+          retention-days: 1
+

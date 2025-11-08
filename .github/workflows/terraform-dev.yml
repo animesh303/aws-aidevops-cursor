@@ -1,0 +1,219 @@
+name: Terraform Dev
+
+on:
+  workflow_call:
+  push:
+    branches: [develop]
+  workflow_run:
+    workflows: ["Python Dev"]
+    types: [completed]
+    branches: [develop]
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  tf-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ~1.1
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Configure Terraform Cloud
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+        run: |
+          cat > $HOME/.terraformrc << EOF
+          credentials "app.terraform.io" {
+            token = "$TFC_TOKEN"
+          }
+          EOF
+      - name: Terraform Init
+        working-directory: iac/terraform
+        run: terraform init -backend=false
+      - name: Terraform Validate
+        working-directory: iac/terraform
+        run: terraform validate
+      - name: Terraform Format
+        working-directory: iac/terraform
+        run: terraform fmt
+
+  tf-plan:
+    needs: [tf-validate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ~1.1
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Configure Terraform Cloud
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+        run: |
+          cat > $HOME/.terraformrc << EOF
+          credentials "app.terraform.io" {
+            token = "$TFC_TOKEN"
+          }
+          EOF
+      - name: Terraform Init
+        working-directory: iac/terraform
+        run: terraform init
+      - name: Detect Terraform Cloud backend
+        id: detect-tfc
+        working-directory: iac/terraform
+        run: |
+          if grep -q "cloud" backend.tf 2>/dev/null || [ -n "$TFC_TOKEN" ]; then
+            echo "USE_TFC=true" >> $GITHUB_ENV
+            echo "Terraform Cloud backend detected"
+          else
+            echo "USE_TFC=false" >> $GITHUB_ENV
+            echo "Standard backend detected"
+          fi
+      - name: Terraform Plan
+        working-directory: iac/terraform
+        run: terraform plan -out=tfplan
+      - name: Upload Terraform Plan
+        if: env.USE_TFC == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-plan-dev
+          path: iac/terraform/tfplan
+          retention-days: 1
+
+  tf-security:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Checkov
+        run: |
+          pip install checkov
+          checkov -d iac/terraform || true
+
+  deploy-dev:
+    needs: [tf-validate, tf-plan, tf-security]
+    runs-on: ubuntu-latest
+    environment: dev
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+      - name: Find Python workflow run
+        if: github.event_name == 'workflow_call'
+        id: find-python-run
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'python-dev.yml',
+              branch: 'develop',
+              status: 'success',
+              per_page: 1
+            });
+            if (runs.data.workflow_runs.length > 0) {
+              core.setOutput('run_id', runs.data.workflow_runs[0].id);
+            } else {
+              core.setFailed('No successful Python Dev workflow run found');
+            }
+      - name: Download Lambda package from upstream workflow
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        id: download-artifact
+        with:
+          name: s3-lambda-trigger-package-dev
+          run-id: ${{ github.event.workflow_run.id || steps.find-python-run.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ./lambda-package
+      - name: Verify artifact downloaded successfully
+        if: steps.download-artifact.outcome != 'success'
+        run: |
+          echo "Error: Failed to download artifact 's3-lambda-trigger-package-dev' from upstream workflow"
+          if [ -n "${{ github.event.workflow_run.id }}" ]; then
+            echo "Upstream workflow run ID: ${{ github.event.workflow_run.id }}"
+          elif [ -n "${{ steps.find-python-run.outputs.run_id }}" ]; then
+            echo "Python workflow run ID: ${{ steps.find-python-run.outputs.run_id }}"
+          fi
+          exit 1
+      - name: Move Lambda package to Terraform directory
+        run: |
+          DEST_PATH="./iac/terraform/lambda_function.zip"
+          mkdir -p $(dirname "$DEST_PATH")
+          cp ./lambda-package/lambda_function.zip "$DEST_PATH"
+          echo "TF_VAR_lambda_zip_file=$(pwd)/$DEST_PATH" >> $GITHUB_ENV
+      - name: Verify Lambda package exists
+        run: |
+          TERRAFORM_LAMBDA_PATH="./iac/terraform/lambda_function.zip"
+          if [ ! -f "$TERRAFORM_LAMBDA_PATH" ]; then
+            echo "Error: Lambda package not found at: $TERRAFORM_LAMBDA_PATH"
+            echo "Terraform code expects this file - deployment will fail without it"
+            echo "Checking downloaded artifact location:"
+            ls -la ./lambda-package/ || echo "lambda-package directory not found"
+            echo "Current directory structure:"
+            find . -name "*.zip" -o -name "lambda_function.zip" 2>/dev/null || echo "No zip files found"
+            exit 1
+          fi
+          echo "✓ Lambda package verified at: $TERRAFORM_LAMBDA_PATH"
+          ls -lh "$TERRAFORM_LAMBDA_PATH"
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Configure Terraform Cloud
+        env:
+          TFC_TOKEN: ${{ secrets.TFC_TOKEN }}
+        run: |
+          cat > $HOME/.terraformrc << EOF
+          credentials "app.terraform.io" {
+            token = "$TFC_TOKEN"
+          }
+          EOF
+      - name: Terraform Init
+        working-directory: iac/terraform
+        run: terraform init
+      - name: Detect Terraform Cloud backend
+        id: detect-tfc
+        working-directory: iac/terraform
+        run: |
+          if grep -q "cloud" backend.tf 2>/dev/null || [ -n "$TFC_TOKEN" ]; then
+            echo "USE_TFC=true" >> $GITHUB_ENV
+            echo "Terraform Cloud backend detected"
+          else
+            echo "USE_TFC=false" >> $GITHUB_ENV
+            echo "Standard backend detected"
+          fi
+      - name: Download Terraform Plan
+        if: env.USE_TFC == 'false'
+        uses: actions/download-artifact@v4
+        with:
+          name: terraform-plan-dev
+          path: iac/terraform
+      - name: Terraform Apply
+        if: env.USE_TFC == 'false'
+        working-directory: iac/terraform
+        run: terraform apply -auto-approve tfplan
+      - name: Terraform Plan and Apply
+        if: env.USE_TFC == 'true'
+        working-directory: iac/terraform
+        run: |
+          terraform plan
+          terraform apply -auto-approve
+

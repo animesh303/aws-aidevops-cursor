@@ -1,0 +1,19 @@
+name: Orchestrator Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  call-python-test:
+    uses: ./.github/workflows/python-test.yml
+
+  call-terraform-test:
+    needs: [call-python-test]
+    uses: ./.github/workflows/terraform-test.yml
+
