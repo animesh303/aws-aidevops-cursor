@@ -119,7 +119,17 @@ If you need to conditionally run an entire job based on file existence, either:
        - **Needs**:
          - All CI jobs for this code type
          - Build job for this code type
-         - **If dependencies exist**: Deploy jobs of upstream code types (e.g., if terraform depends on python, `terraform-deploy` needs `python-deploy`)
+         - **CRITICAL - Two Types of Dependencies**:
+           1. **Artifact Dependencies**: If this code type needs artifacts from other code types
+              - Example: Terraform needs Python Lambda package → `terraform-deploy` needs `python-build` (NOT `python-deploy`)
+              - Wait for upstream **build jobs** that produce required artifacts
+           2. **Infrastructure Dependencies**: If this code type's deploy needs infrastructure created by other code types
+              - Example: Python deploy needs Lambda function to exist (created by Terraform) → `python-deploy` needs `terraform-deploy`
+              - Wait for upstream **deploy jobs** that create required infrastructure
+         - **Dependency Detection from Phase 1**:
+           - Use dependency map from Phase 1 to determine correct job dependencies
+           - If artifact-mappings.json shows Terraform needs Python artifact → `terraform-deploy` needs `python-build`
+           - If Python deploy updates Lambda functions that Terraform creates → `python-deploy` needs `terraform-deploy`
        - **Dependency Handling** (CRITICAL - MANDATORY if dependencies detected):
          - **MANDATORY CHECK**: If Phase 1 detected dependencies for this code type, dependency handling steps MUST be included
          - **Load Artifact Mapping** (PREFERRED):

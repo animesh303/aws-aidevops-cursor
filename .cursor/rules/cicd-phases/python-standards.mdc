@@ -90,10 +90,19 @@ Define CI/CD workflow patterns and standards for Python code in single productio
 ## Deployment Job
 
 - **Name**: `python-deploy`
-- **Needs**: Build job (`python-build`) and all CI jobs
+- **Needs**:
+  - Build job (`python-build`) and all CI jobs
+  - **CRITICAL - Infrastructure Dependencies**: If Python deploy needs infrastructure created by other code types
+    - Example: Python deploy updates Lambda function that Terraform creates → `python-deploy` needs `terraform-deploy`
+    - Wait for upstream **deploy jobs** that create required infrastructure
+    - Example: `needs: [python-build, terraform-deploy]`
 - **Condition**: `if: always()` - runs even if CI jobs fail (since CI jobs use `continue-on-error: true`)
 - **Environment**: `production`
 - **Workflow Trigger**: `push` to `main` branch only
+- **Infrastructure Dependency Detection**:
+  - **MANDATORY**: Check if Python deploy job updates/creates resources that other code types (e.g., Terraform) create
+  - If deploy uses `aws lambda update-function-code` or `aws lambda create-function` for functions created by Terraform → infrastructure dependency exists
+  - Load artifact-mappings.json: If `lambda_functions` array exists AND Terraform creates those functions → infrastructure dependency
 - **Steps**:
   - Checkout code
   - Configure AWS credentials via OIDC (if needed)

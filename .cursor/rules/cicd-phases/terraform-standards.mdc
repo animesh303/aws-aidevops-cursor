@@ -2,6 +2,7 @@
 description: CI/CD workflow patterns and standards for Terraform code in single production workflow.
 alwaysApply: false
 ---
+
 # Terraform CI/CD Workflow Standards
 
 ## Purpose
@@ -102,10 +103,13 @@ Define CI/CD workflow patterns and standards for Terraform code in single produc
 ### Deploy Job (in unified workflow `ci-cd.yml`)
 
 - **Name**: `terraform-deploy`
-- **Needs**: 
+- **Needs**:
   - All CI jobs: `[terraform-lint, terraform-security, terraform-validate]`
   - Build job (if exists): `terraform-build`
-  - **If Terraform depends on other code types**: Upstream deploy jobs (e.g., `python-deploy`)
+  - **CRITICAL - Artifact Dependencies**: If Terraform needs artifacts from other code types
+    - Wait for upstream **build jobs** that produce artifacts (e.g., `python-build` for Lambda package)
+    - Example: `needs: [terraform-lint, terraform-security, terraform-validate, python-build]`
+    - **DO NOT** wait for upstream deploy jobs for artifact dependencies
 - **Environment**: `default` (or custom environment name)
 - **MANDATORY Dependency Detection**:
   - **If Terraform code references artifacts** (e.g., `filename = "lambda_function.zip"` in any `.tf` file), Terraform HAS dependencies
@@ -126,25 +130,28 @@ Define CI/CD workflow patterns and standards for Terraform code in single produc
      - **FALLBACK - Manual Detection**: If mapping file does not exist, use code analysis to determine artifact names and paths
 
      **Required Steps** (see `workflow-dependency-handling.mdc` for complete examples):
+
      1. Download artifacts from upstream build jobs using `actions/download-artifact@v4`
      2. Place artifacts in correct location (use `artifact_destination_path` from mapping if available)
      3. Verify artifacts exist before Terraform operations
      4. Pass artifact paths to Terraform via environment variables
 
      **See**: `workflow-dependency-handling.mdc` for complete dependency handling patterns and code examples
-  5. Configure AWS credentials via OIDC (mandatory)
-  6. Configure Terraform Cloud (if applicable)
-  7. **Pass dependency artifacts to Terraform**:
+
+  3. Configure AWS credentials via OIDC (mandatory)
+  4. Configure Terraform Cloud (if applicable)
+  5. **Pass dependency artifacts to Terraform**:
      - Set environment variables or Terraform variables with artifact paths/URLs
      - Example: `TF_VAR_lambda_package_path=./iac/terraform/lambda_function.zip`
-  8. **Plan Application**:
+  6. **Plan Application**:
      - If NOT using Terraform Cloud (`USE_TFC=false`): Download plan artifact from CI job and apply it
      - If using Terraform Cloud (`USE_TFC=true`): Run `terraform plan` and `terraform apply -auto-approve` directly
-  9. Deploy to environment
+  7. Deploy to environment
 
 ## Job Naming Convention
 
 For single production workflow, use these job names:
+
 - `terraform-lint` - Lint job (optional, can use validate instead)
 - `terraform-security` - Security scan job
 - `terraform-validate` - Validate job
@@ -182,22 +189,24 @@ For single production workflow, use these job names:
      - **FALLBACK - Manual Detection**: If mapping file does not exist, use code analysis to determine artifact names and paths
 
      **Required Steps** (see `workflow-dependency-handling.mdc` for complete examples):
+
      1. Download artifacts from upstream build jobs using `actions/download-artifact@v4`
      2. Place artifacts in correct location (use `artifact_destination_path` from mapping if available)
      3. Verify artifacts exist before Terraform operations
      4. Pass artifact paths to Terraform via environment variables
 
      **See**: `workflow-dependency-handling.mdc` for complete dependency handling patterns and code examples
-  5. Configure AWS credentials via OIDC (mandatory)
-  6. Configure Terraform Cloud (if applicable)
-  7. **Pass dependency artifacts to Terraform**:
+
+  3. Configure AWS credentials via OIDC (mandatory)
+  4. Configure Terraform Cloud (if applicable)
+  5. **Pass dependency artifacts to Terraform**:
      - Set environment variables or Terraform variables with artifact paths/URLs
      - Example: `TF_VAR_lambda_package_path=./iac/terraform/lambda_function.zip`
-  8. **Plan Application**:
+  6. **Plan Application**:
      - If NOT using Terraform Cloud (`USE_TFC=false`): Download plan artifact from CI job and apply it
      - If using Terraform Cloud (`USE_TFC=true`): Run `terraform plan` and `terraform apply -auto-approve` directly
-  9. Deploy to production environment
-  10. Protected with GitHub environment protection rules
+  7. Deploy to production environment
+  8. Protected with GitHub environment protection rules
 
 ## Permissions
 
@@ -225,9 +234,11 @@ For single production workflow, use these job names:
      - `source = "*.zip"` → Terraform depends on artifact-producing code type
      - Any reference to `.zip`, Lambda packages, or other build artifacts → Dependency exists
 - **MANDATORY Implementation**: If dependencies are detected (from requirements OR code analysis):
-  - **Job Dependencies**: Use `needs:` to wait for upstream deploy jobs (e.g., `needs: [terraform-lint, terraform-security, terraform-validate, python-deploy]`)
+  - **Artifact Dependencies**: Use `needs:` to wait for upstream **build jobs** that produce artifacts
+    - Example: `needs: [terraform-lint, terraform-security, terraform-validate, python-build]`
+    - **CRITICAL**: Wait for build jobs, NOT deploy jobs, for artifact dependencies
   - **Follow Dependency Pattern**: Implement dependency handling steps as documented in `workflow-dependency-handling.mdc`
   - **Artifact Passing**: Pass artifact paths/URLs to Terraform via environment variables or Terraform variables
 - **DO NOT SKIP**: Dependency handling steps are MANDATORY, not optional - they ensure Terraform has required artifacts
-- **Multiple Dependencies**: If Terraform depends on multiple code types, wait for all upstream deploy jobs via `needs:` array
+- **Multiple Dependencies**: If Terraform depends on multiple code types, wait for all upstream build jobs via `needs:` array
 - **See**: `workflow-dependency-handling.mdc` for complete dependency handling patterns, code examples, and best practices

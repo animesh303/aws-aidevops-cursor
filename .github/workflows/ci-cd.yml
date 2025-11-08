@@ -150,36 +150,6 @@ jobs:
           path: src/lambda-python-s3-lambda-trigger/lambda-package.zip
           retention-days: 1
 
-  # Python Deploy Job
-  python-deploy:
-    needs: [python-build]
-    runs-on: ubuntu-latest
-    if: always()
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure AWS credentials via OIDC
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ vars.AWS_REGION }}
-      - name: Download Lambda package
-        uses: actions/download-artifact@v4
-        with:
-          name: lambda-package
-      - name: Deploy Lambda function
-        run: |
-          aws lambda update-function-code \
-            --function-name s3-lambda-trigger-hello-world \
-            --zip-file fileb://lambda-package/lambda-package.zip || \
-          aws lambda create-function \
-            --function-name s3-lambda-trigger-hello-world \
-            --runtime python3.12 \
-            --role ${{ secrets.AWS_LAMBDA_ROLE_ARN }} \
-            --handler lambda_handler.lambda_handler \
-            --zip-file fileb://lambda-package/lambda-package.zip \
-            --memory-size 128
-
   # Terraform CI Jobs
   terraform-security:
     runs-on: ubuntu-latest
@@ -230,8 +200,9 @@ jobs:
         run: terraform fmt
 
   # Terraform Deploy Job
+  # Depends on python-build for Lambda package artifact
   terraform-deploy:
-    needs: [terraform-security, terraform-validate, python-deploy]
+    needs: [terraform-security, terraform-validate, python-build]
     runs-on: ubuntu-latest
     if: always()
     environment: production
@@ -303,4 +274,36 @@ jobs:
       - name: Terraform Apply
         working-directory: iac/terraform
         run: terraform apply -auto-approve
+
+  # Python Deploy Job
+  # Depends on terraform-deploy because Terraform creates the Lambda function
+  # Python deploy updates the function code, so function must exist first
+  python-deploy:
+    needs: [python-build, terraform-deploy]
+    runs-on: ubuntu-latest
+    if: always()
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Download Lambda package
+        uses: actions/download-artifact@v4
+        with:
+          name: lambda-package
+      - name: Deploy Lambda function
+        run: |
+          aws lambda update-function-code \
+            --function-name s3-lambda-trigger-hello-world \
+            --zip-file fileb://lambda-package/lambda-package.zip || \
+          aws lambda create-function \
+            --function-name s3-lambda-trigger-hello-world \
+            --runtime python3.12 \
+            --role ${{ secrets.AWS_LAMBDA_ROLE_ARN }} \
+            --handler lambda_handler.lambda_handler \
+            --zip-file fileb://lambda-package/lambda-package.zip \
+            --memory-size 128
 

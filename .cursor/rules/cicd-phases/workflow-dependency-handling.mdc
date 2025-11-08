@@ -3,9 +3,22 @@ description: Patterns for managing inter-code dependencies in GitHub Actions wor
 alwaysApply: false
 ---
 
-## Single Dependency Pattern
+## Dependency Types
 
-**When Code Type A depends on Code Type B** (e.g., Terraform depends on Python Lambda):
+**CRITICAL**: There are TWO types of dependencies that require different job dependency patterns:
+
+1. **Artifact Dependency**: Code type A needs an artifact from code type B's build job
+
+   - Example: Terraform needs Lambda zip file from Python build
+   - Job dependency: `A-deploy` needs `B-build` (NOT `B-deploy`)
+
+2. **Infrastructure Dependency**: Code type A's deploy needs infrastructure created by code type B's deploy
+   - Example: Python deploy needs Lambda function to exist (created by Terraform deploy)
+   - Job dependency: `A-deploy` needs `B-deploy`
+
+## Single Dependency Pattern - Artifact Dependency
+
+**When Code Type A needs an artifact from Code Type B** (e.g., Terraform needs Python Lambda package):
 
 ### Upstream Job (Code Type B - Python Build)
 
@@ -22,15 +35,14 @@ alwaysApply: false
 
 ### Downstream Job (Code Type A - Terraform Deploy)
 
-- **CRITICAL**: Configure job dependency using `needs:` to wait for upstream deploy job:
+- **CRITICAL**: Configure job dependency using `needs:` to wait for upstream **build job** (NOT deploy job):
   ```yaml
-    terraform-deploy:
-    needs:
-      [terraform-lint, terraform-security, terraform-validate, python-deploy]
-    runs-on: ubuntu-latest
-    environment: production
-    steps:
-      - uses: actions/checkout@v4
+  terraform-deploy:
+  needs: [terraform-lint, terraform-security, terraform-validate, python-build]
+  runs-on: ubuntu-latest
+  environment: production
+  steps:
+    - uses: actions/checkout@v4
   ```
 - **CRITICAL**: Download artifacts from upstream build job BEFORE any Terraform operations (with error handling):
 
@@ -80,35 +92,74 @@ alwaysApply: false
 
 ---
 
-## Multiple Dependencies Pattern
+## Combined Dependencies Pattern (Artifact + Infrastructure)
 
-If a code type depends on multiple others, configure job dependencies using `needs:` to wait for all upstream deploy jobs:
+**When a code type has both artifact and infrastructure dependencies** (e.g., Terraform needs Python artifact, Python deploy needs Terraform infrastructure):
 
 ```yaml
-  kubernetes-deploy:
-  needs:
-    [
-      kubernetes-lint,
-      kubernetes-security,
-      kubernetes-validate,
-      python-deploy,
-      docker-deploy,
-    ]
+# Terraform deploy needs Python build artifact
+terraform-deploy:
+  needs: [terraform-lint, terraform-security, terraform-validate, python-build]
   runs-on: ubuntu-latest
   environment: production
   steps:
     - uses: actions/checkout@v4
-    # Download artifacts from all upstream build jobs
     - name: Download Lambda package from Python build
       uses: actions/download-artifact@v4
       with:
         name: lambda-package
         path: ./lambda-package
-    - name: Download Docker image info from Docker build
+    # ... Terraform deployment steps
+
+# Python deploy needs Terraform to create Lambda function first
+python-deploy:
+  needs: [python-build, terraform-deploy]
+  runs-on: ubuntu-latest
+  environment: production
+  steps:
+    - uses: actions/checkout@v4
+    - name: Download Lambda package
       uses: actions/download-artifact@v4
       with:
-        name: docker-image
-        path: ./docker-image
+        name: lambda-package
+    # ... Python deployment steps (updates Lambda function code)
+```
+
+**Execution Order**:
+
+1. Python build → produces artifact
+2. Terraform deploy → uses Python artifact, creates Lambda function
+3. Python deploy → updates Lambda function code (function must exist)
+
+## Multiple Dependencies Pattern
+
+If a code type depends on multiple others, configure job dependencies using `needs:` to wait for all required upstream jobs (build jobs for artifacts, deploy jobs for infrastructure):
+
+```yaml
+kubernetes-deploy:
+needs:
+  [
+    kubernetes-lint,
+    kubernetes-security,
+    kubernetes-validate,
+    python-deploy,
+    docker-deploy,
+  ]
+runs-on: ubuntu-latest
+environment: production
+steps:
+  - uses: actions/checkout@v4
+  # Download artifacts from all upstream build jobs
+  - name: Download Lambda package from Python build
+    uses: actions/download-artifact@v4
+    with:
+      name: lambda-package
+      path: ./lambda-package
+  - name: Download Docker image info from Docker build
+    uses: actions/download-artifact@v4
+    with:
+      name: docker-image
+      path: ./docker-image
 ```
 
 **Important**: When multiple dependencies exist, download artifacts from all upstream build jobs. Each build job uploads its artifacts independently, so you can download them all in the downstream deploy job.
@@ -146,7 +197,7 @@ If a code type depends on multiple others, configure job dependencies using `nee
    ```yaml
    terraform-deploy:
      needs:
-       [terraform-lint, terraform-security, terraform-validate, python-deploy]
+       [terraform-lint, terraform-security, terraform-validate, python-build]
      steps:
        - name: Download Lambda package
          uses: actions/download-artifact@v4
@@ -154,6 +205,55 @@ If a code type depends on multiple others, configure job dependencies using `nee
            name: lambda-package
            path: ./lambda-package
    ```
+
+## Single Dependency Pattern - Infrastructure Dependency
+
+**When Code Type A's deploy needs infrastructure created by Code Type B's deploy** (e.g., Python deploy needs Lambda function created by Terraform):
+
+### Upstream Job (Code Type B - Terraform Deploy)
+
+- Creates infrastructure resources (e.g., Lambda function, S3 bucket, etc.)
+- Infrastructure must exist before downstream deploy can update/use it
+
+### Downstream Job (Code Type A - Python Deploy)
+
+- **CRITICAL**: Configure job dependency using `needs:` to wait for upstream **deploy job**:
+  ```yaml
+  python-deploy:
+  needs: [python-build, terraform-deploy]
+  runs-on: ubuntu-latest
+  environment: production
+  steps:
+    - uses: actions/checkout@v4
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+        aws-region: ${{ vars.AWS_REGION }}
+    - name: Download Lambda package
+      uses: actions/download-artifact@v4
+      with:
+        name: lambda-package
+    - name: Deploy Lambda function
+      run: |
+        # Lambda function must exist (created by Terraform) before updating code
+        aws lambda update-function-code \
+          --function-name s3-lambda-trigger-hello-world \
+          --zip-file fileb://lambda-package/lambda-package.zip || \
+        aws lambda create-function \
+          --function-name s3-lambda-trigger-hello-world \
+          --runtime python3.12 \
+          --role ${{ secrets.AWS_LAMBDA_ROLE_ARN }} \
+          --handler lambda_handler.lambda_handler \
+          --zip-file fileb://lambda-package/lambda-package.zip \
+          --memory-size 128
+  ```
+
+**Key Points**:
+
+- Infrastructure dependency means the resource must exist before deploy
+- Wait for upstream deploy job, not build job
+- Common pattern: Application code deploy needs infrastructure to exist first
 
 ### Alternative Methods (Only if needed for special cases)
 
