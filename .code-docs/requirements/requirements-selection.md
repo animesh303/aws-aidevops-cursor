@@ -1,6 +1,6 @@
 # Requirements Selection Interface
 
-**Generated**: 2025-01-28T15:00:00Z
+**Generated**: 2025-01-28T15:50:00Z
 
 Please select a requirement by number or ticket key:
 
@@ -8,16 +8,18 @@ Please select a requirement by number or ticket key:
 
 ## Available Requirements
 
-**1.** **AWS-5** - AWS S3 Bucket trigger Lambda function.
-   - **Status**: In Progress
-   - **Description**: Create an event-driven serverless architecture that automatically processes files uploaded to an S3 bucket. Implement an S3 bucket with Lambda function integration that triggers a "Hello World" demo function whenever a file is uploaded to the bucket.
-   - **Key Features**:
-     - S3 bucket: demobucketforawsaidevops (us-east-1)
-     - Lambda function: Python 3.12 runtime, 128 MB memory
-     - Event trigger: S3 to Lambda
-     - Infrastructure: Terraform
+**1.** **AWS-10** - Demo step function application
+   - Status: To Do
+   - IAC Tool: Terraform
+   - Runtime: Python 3.12 (Lambda)
+   - Description: Step Functions state machine orchestrating Lambda function and DynamoDB record insertion
+
+**2.** **AWS-5** - AWS S3 Bucket trigger Lambda function.
+   - Status: In Progress
+   - IAC Tool: Terraform
+   - Runtime: Python 3.12 (Lambda)
+   - Description: S3 bucket with Lambda function trigger for file uploads
 
 ---
 
-**Instructions**: Reply with the requirement number (1) or the ticket key (e.g., AWS-5)
-
+**Instructions**: Reply with the requirement number (1-2) or the ticket key (e.g., AWS-10, AWS-5)
