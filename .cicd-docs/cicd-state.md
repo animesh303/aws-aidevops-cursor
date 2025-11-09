@@ -2,20 +2,23 @@
 
 ## Current Status
 
-- **Current Phase**: complete
-- **Last Updated**: 2025-01-28T00:00:00Z
+- **Current Phase**: review-confirm
+- **Last Updated**: 2025-01-28T16:30:00Z
 - **Is Regeneration**: true
 
 ## Detected Code Types
 
-- **python**: `src/lambda-python-s3-lambda-trigger/`, `tests/s3-lambda-trigger/`
-- **terraform**: `iac/terraform/`
+- **python**: 
+  - `src/lambda-python-s3-lambda-trigger/` (AWS-5, feature: s3-lambda-trigger)
+  - `src/lambda-python-step-function-demo/` (AWS-10, feature: step-function-demo)
+- **terraform**: `iac/terraform/` (both features)
 
 ## Requirements Files Loaded
 
 - `.code-docs/requirements/AWS-5_requirements.md`
 - `.code-docs/requirements/AWS-5-analysis.md`
-- `.code-docs/requirements/AWS-5-code-analysis.md`
+- `.code-docs/requirements/AWS-10_requirements.md`
+- `.code-docs/requirements/AWS-10-analysis.md`
 - `.code-docs/artifact-mappings.json`
 
 ## Dependency Map
@@ -27,30 +30,20 @@
     "depends_on": "python",
     "dependency_type": "artifact",
     "artifacts": ["lambda_function.zip"],
-    "artifact_name": "s3-lambda-trigger-package-dev",
-    "artifact_source_path": "src/lambda-python-s3-lambda-trigger",
-    "artifact_destination_path": "iac/terraform/lambda_function.zip"
-  },
-  {
-    "code_type": "python",
-    "depends_on": "terraform",
-    "dependency_type": "infrastructure",
-    "description": "Python deploy needs Terraform to create Lambda function first"
+    "description": "Terraform needs Lambda zip files for both features (s3-lambda-trigger and step-function-demo)"
   }
 ]
 ```
 
 **Dependency Chains**: 
 - `terraform → depends on → python` (artifact dependency)
-- `python-deploy → depends on → terraform-deploy` (infrastructure dependency)
 
 **Execution Order**:
 
-1. Python CI jobs (lint, security, tests) - parallel
-2. Python build - after CI jobs
-3. Terraform CI jobs (security, validate) - parallel
-4. Terraform deploy - after Terraform CI jobs AND Python build
-5. Python deploy - after Python build AND Terraform deploy
+1. Python CI jobs (lint, security, tests) - parallel for both features
+2. Terraform CI jobs (security, validate) - parallel
+3. Python build - after CI jobs (builds both Lambda packages sequentially)
+4. Terraform deploy - after Terraform CI jobs AND Python build (deploys both features)
 
 ## Existing Workflows
 
@@ -64,17 +57,14 @@
 
 ## Phase Checkboxes
 
-- [x] Phase 1: Detect & Plan
-- [x] Phase 2: Generate Workflows
-- [x] Phase 3: Review & Confirm
-- [x] Phase 4: Commit & Push
+- [ ] Phase 1: Detect & Plan
+- [ ] Phase 2: Generate Workflows
+- [ ] Phase 3: Review & Confirm
+- [ ] Phase 4: Commit & Push
 
 ## Notes
 
 - Regeneration requested - starting fresh from Phase 1
-- Single production workflow regenerated with combined job pattern
-- Combined job pattern: Python build + Terraform deploy in same job (most preferred approach)
-- No artifact upload/download needed (same runner)
-- Successfully committed and pushed to main branch (commit: 3cfe87e)
-- Single production workflow (ci-cd.yml) is now active and will trigger on main branch pushes
+- Two Python Lambda features detected: s3-lambda-trigger (AWS-5) and step-function-demo (AWS-10)
+- Both features use same artifact filename default - need to handle sequential build or unique naming
 

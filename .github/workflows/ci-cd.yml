@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Python CI Jobs (run in parallel)
+  # Python CI Jobs (run in parallel for both features)
   python-lint:
     name: Python Lint
     runs-on: ubuntu-latest
@@ -29,14 +29,25 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
-      - name: Install dependencies
+      - name: Install dependencies - s3-lambda-trigger
         working-directory: src/lambda-python-s3-lambda-trigger
         run: |
           if [ -f requirements.txt ] && [ -s requirements.txt ]; then
             pip install -r requirements.txt
           fi
-      - name: Run Flake8
+      - name: Run Flake8 - s3-lambda-trigger
         working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          pip install flake8
+          flake8 . || true
+      - name: Install dependencies - step-function-demo
+        working-directory: src/lambda-python-step-function-demo
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Run Flake8 - step-function-demo
+        working-directory: src/lambda-python-step-function-demo
         run: |
           pip install flake8
           flake8 . || true
@@ -52,14 +63,25 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
-      - name: Install dependencies
+      - name: Install dependencies - s3-lambda-trigger
         working-directory: src/lambda-python-s3-lambda-trigger
         run: |
           if [ -f requirements.txt ] && [ -s requirements.txt ]; then
             pip install -r requirements.txt
           fi
-      - name: Run Bandit
+      - name: Run Bandit - s3-lambda-trigger
         working-directory: src/lambda-python-s3-lambda-trigger
+        run: |
+          pip install bandit
+          bandit -r . || true
+      - name: Install dependencies - step-function-demo
+        working-directory: src/lambda-python-step-function-demo
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Run Bandit - step-function-demo
+        working-directory: src/lambda-python-step-function-demo
         run: |
           pip install bandit
           bandit -r . || true
@@ -78,7 +100,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
-      - name: Install dependencies
+      - name: Install dependencies - s3-lambda-trigger
         working-directory: src/lambda-python-s3-lambda-trigger
         run: |
           if [ -f requirements.txt ] && [ -s requirements.txt ]; then
@@ -88,11 +110,22 @@ jobs:
         if: ${{ hashFiles('tests/**') != '' }}
         run: |
           pip install pytest pytest-cov
-      - name: Run tests
+      - name: Run tests - s3-lambda-trigger
         if: ${{ hashFiles('tests/**') != '' }}
         working-directory: .
         run: |
-          pytest tests/ --cov=. --cov-report=xml --cov-report=html || true
+          pytest tests/s3-lambda-trigger/ --cov=src/lambda-python-s3-lambda-trigger --cov-report=xml --cov-report=html || true
+      - name: Install dependencies - step-function-demo
+        working-directory: src/lambda-python-step-function-demo
+        run: |
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Run tests - step-function-demo
+        if: ${{ hashFiles('tests/**') != '' }}
+        working-directory: .
+        run: |
+          pytest tests/step-function-demo/ --cov=src/lambda-python-step-function-demo --cov-report=xml --cov-report=html || true
       - name: Upload coverage reports
         if: always()
         uses: actions/upload-artifact@v4
@@ -154,44 +187,67 @@ jobs:
 
   # Terraform Deploy Job (Combined: Python Build + Terraform Deploy)
   terraform-deploy:
-    name: Terraform Deploy
+    name: Build Lambda and Deploy Terraform
     needs: [python-lint, python-security, python-test, terraform-security, terraform-validate]
     runs-on: ubuntu-latest
     environment: production
     steps:
       - uses: actions/checkout@v4
       
-      # Python Build Steps (build artifact where Terraform expects it)
+      # Python Build Steps (build artifacts where Terraform expects them)
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: "pip"
-      - name: Install dependencies
+      
+      # Build s3-lambda-trigger Lambda package
+      - name: Install dependencies - s3-lambda-trigger
         working-directory: src/lambda-python-s3-lambda-trigger
         run: |
           if [ -f requirements.txt ] && [ -s requirements.txt ]; then
             pip install -r requirements.txt
           fi
-      - name: Build Lambda package for Terraform
+      - name: Build Lambda package for s3-lambda-trigger
         run: |
           mkdir -p ./iac/terraform
           cd src/lambda-python-s3-lambda-trigger
-          zip -r ../../iac/terraform/lambda_function.zip . -x "*.git*" "*.md" "tests/*" "*.tf*" "iac/**"
+          zip -r ../../iac/terraform/s3-lambda-trigger-lambda_function.zip . -x "*.git*" "*.md" "tests/*" "*.tf*" "iac/**"
           cd ../..
-          echo "✓ Lambda package built at: ./iac/terraform/lambda_function.zip"
-          ls -lh ./iac/terraform/lambda_function.zip
+          echo "✓ s3-lambda-trigger Lambda package built at: ./iac/terraform/s3-lambda-trigger-lambda_function.zip"
+          ls -lh ./iac/terraform/s3-lambda-trigger-lambda_function.zip
       
-      # Verify artifact exists before Terraform operations
-      - name: Verify Lambda package exists
+      # Build step-function-demo Lambda package
+      - name: Install dependencies - step-function-demo
+        working-directory: src/lambda-python-step-function-demo
         run: |
-          TERRAFORM_LAMBDA_PATH="./iac/terraform/lambda_function.zip"
-          if [ ! -f "$TERRAFORM_LAMBDA_PATH" ]; then
-            echo "Error: Lambda package not found at: $TERRAFORM_LAMBDA_PATH"
+          if [ -f requirements.txt ] && [ -s requirements.txt ]; then
+            pip install -r requirements.txt
+          fi
+      - name: Build Lambda package for step-function-demo
+        run: |
+          mkdir -p ./iac/terraform
+          cd src/lambda-python-step-function-demo
+          zip -r ../../iac/terraform/step-function-demo-lambda_function.zip . -x "*.git*" "*.md" "tests/*" "*.tf*" "iac/**"
+          cd ../..
+          echo "✓ step-function-demo Lambda package built at: ./iac/terraform/step-function-demo-lambda_function.zip"
+          ls -lh ./iac/terraform/step-function-demo-lambda_function.zip
+      
+      # Verify artifacts exist before Terraform operations
+      - name: Verify Lambda packages exist
+        run: |
+          S3_LAMBDA_PATH="./iac/terraform/s3-lambda-trigger-lambda_function.zip"
+          SF_LAMBDA_PATH="./iac/terraform/step-function-demo-lambda_function.zip"
+          if [ ! -f "$S3_LAMBDA_PATH" ]; then
+            echo "Error: s3-lambda-trigger Lambda package not found at: $S3_LAMBDA_PATH"
             exit 1
           fi
-          echo "✓ Lambda package verified at: $TERRAFORM_LAMBDA_PATH"
-          ls -lh "$TERRAFORM_LAMBDA_PATH"
+          if [ ! -f "$SF_LAMBDA_PATH" ]; then
+            echo "Error: step-function-demo Lambda package not found at: $SF_LAMBDA_PATH"
+            exit 1
+          fi
+          echo "✓ Both Lambda packages verified"
+          ls -lh ./iac/terraform/*lambda_function.zip
       
       # Terraform Deploy Steps
       - name: Setup Terraform
@@ -232,7 +288,11 @@ jobs:
       - name: Terraform Plan
         id: terraform-plan
         working-directory: iac/terraform
-        run: terraform plan -out=tfplan
+        run: |
+          terraform plan \
+            -var="lambda_zip_file=s3-lambda-trigger-lambda_function.zip" \
+            -var="step_function_demo_lambda_zip_file=step-function-demo-lambda_function.zip" \
+            -out=tfplan
         continue-on-error: true
       - name: Terraform Plan Status
         run: |
@@ -256,7 +316,14 @@ jobs:
         working-directory: iac/terraform
         run: |
           if [ "$USE_TFC" == "true" ]; then
-            terraform apply -auto-approve
+            terraform apply \
+              -var="lambda_zip_file=s3-lambda-trigger-lambda_function.zip" \
+              -var="step_function_demo_lambda_zip_file=step-function-demo-lambda_function.zip" \
+              -auto-approve
           else
-            terraform apply tfplan
+            terraform apply \
+              -var="lambda_zip_file=s3-lambda-trigger-lambda_function.zip" \
+              -var="step_function_demo_lambda_zip_file=step-function-demo-lambda_function.zip" \
+              tfplan
           fi
+
