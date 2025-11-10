@@ -4,89 +4,103 @@
 
 - **Ticket Number**: AWS-10
 - **Ticket Title**: Demo step function application
-- **Created Date**: 2025-11-09T21:43:30.999+0530
-- **Last Updated**: 2025-11-10T15:57:51Z
-- **Status**: In Progress
+- **Created Date**: 2025-11-09
+- **Last Updated**: 2025-11-10
+- **Status**: To Do
 
 ## 1. Project Overview
 
-**Business Objective**: Create a demonstration Step Functions state machine to showcase AWS serverless orchestration capabilities, integrating Lambda functions and DynamoDB for data persistence.
+**Business Objective**: Create a demonstration Step Functions state machine that orchestrates a simple workflow involving a Lambda function and DynamoDB table to showcase AWS service integration capabilities.
 
-**Solution Summary**: Implement a serverless Step Functions state machine that orchestrates a Lambda function execution and DynamoDB record insertion. The state machine receives JSON input, triggers a "hello world" Lambda function, and stores the processed data in a DynamoDB table with timestamp and message attributes.
+**Solution Summary**: Implement a Step Functions state machine that receives JSON input, triggers a hello world Lambda function, and inserts a record into a DynamoDB table with timestamp and message from the input payload.
 
-**Scope**: 
-- **Included**: Step Functions state machine, Lambda function (Python 3.12), DynamoDB table, IAM roles and permissions, Terraform infrastructure code
-- **Out of Scope**: Error handling beyond basic demo, retry logic, advanced monitoring/alerting, multi-region deployment, authentication/authorization
+**Scope**:
+
+- **In Scope**: Step Functions state machine, Lambda function, DynamoDB table, IAM roles and permissions for service integration
+- **Out of Scope**: Production-grade error handling, complex business logic, multi-region deployment, advanced monitoring and alerting
 
 ## 2. Functional Requirements
 
 ### 2.1 Core Functionality
 
-- **FR-1**: Step Functions state machine must receive JSON input with a "message" field and trigger a Lambda function
-- **FR-2**: Lambda function must execute successfully and process the input message, logging execution status to CloudWatch
-- **FR-3**: Step Functions state machine must insert a record into DynamoDB table with:
-  - Unique identifier (id)
-  - Current timestamp (ISO 8601 format)
-  - Message from input payload
-- **FR-4**: All AWS service integrations must function correctly (Step Functions → Lambda → DynamoDB)
+- **FR-1**: Step Functions state machine must receive JSON input with the following format:
+
+  ```json
+  {
+    "message": "Hello step function"
+  }
+  ```
+
+- **FR-2**: Step Functions state machine must trigger a hello world Lambda function as part of the workflow execution. The Lambda function should simply return a "hello world" message (no processing of input message required). The Lambda execution is fire-and-forget (no return data needed by Step Functions).
+
+- **FR-3**: Step Functions state machine must insert a record into a DynamoDB table with the following structure:
+
+  - **Partition Key**: Generated ID (unique identifier for each record)
+  - **Timestamp**: Current timestamp (generated at time of insertion)
+  - **Message**: Value from the input JSON payload (`message` field)
+
+- **FR-4**: The workflow execution can run Lambda invocation and DynamoDB insertion in parallel (both operations can execute simultaneously after receiving input).
 
 ### 2.2 User Interactions
 
-- **API-1**: Step Functions state machine accepts JSON input via direct execution (manual trigger or API call)
-- **Data-1**: Input JSON format: `{"message": "Hello step function"}`
-- **Data-2**: DynamoDB record structure: `{id: <unique-id>, Timestamp: <ISO-8601-timestamp>, Message: <from-input>}`
+- **UI-1**: Step Functions state machine can be triggered via AWS Console, AWS CLI, or API call with JSON input payload.
+
+- **API-1**: Step Functions execution API accepts JSON input and returns execution ARN and status.
 
 ### 2.3 Data Requirements
 
-**Data Input**: JSON payload with "message" field provided to Step Functions state machine execution
+**Data Input**:
 
-**Data Processing**: 
-- Step Functions passes input to Lambda function
-- Lambda function processes message and logs execution
-- Step Functions receives Lambda output and constructs DynamoDB record
-- DynamoDB record includes generated unique id and current timestamp
+- JSON payload with `message` field (string)
+- Example: `{"message": "Hello step function"}`
 
-**Data Output**: DynamoDB record persisted in table with id, Timestamp, and Message attributes
+**Data Processing**:
 
-**Data Volume**: Demo-level data volumes (low frequency, minimal data size)
+- Step Functions orchestrates workflow execution
+- Lambda function receives input and processes it (hello world functionality)
+- DynamoDB record is created with timestamp and message
+
+**Data Output**:
+
+- DynamoDB record with:
+  - Timestamp (current timestamp at insertion time)
+  - Message (from input JSON payload)
+- Step Functions execution result (success/failure status)
+
+**Data Volume**: Demo-level data volumes (low volume, single record per execution)
 
 ## 3. Non-Functional Requirements
 
 ### 3.1 Performance
 
-- **Response Time**: Step Functions execution should complete within Lambda timeout (30 seconds)
-- **Throughput**: Not specified (demo use case)
-- **Scalability**: Basic demo scalability (no specific scaling requirements)
+- **Response Time**: Not specified (demo application)
+- **Throughput**: Not specified (demo application)
+- **Scalability**: Not specified (demo application)
 
 ### 3.2 Security
 
-- **Authentication**: No authentication required (demo environment)
-- **Authorization**: IAM roles with least privilege:
-  - Step Functions execution role with permission to invoke Lambda
-  - Lambda execution role with permission to write to DynamoDB table
-  - Step Functions execution role with permission to write to DynamoDB table
+- **Authentication**: AWS IAM-based authentication for service access
+- **Authorization**: IAM roles with least privilege permissions for Step Functions, Lambda, and DynamoDB
 - **Data Protection**: Standard AWS encryption at rest and in transit
-- **Audit**: CloudWatch logs for Lambda execution and Step Functions execution history
+- **Audit**: CloudTrail logging for API calls (default AWS behavior)
 
 ### 3.3 Reliability
 
 - **Availability**: Standard AWS service availability (no specific SLA requirement for demo)
-- **Disaster Recovery**: Not applicable (demo environment)
-- **Backup**: Not required (demo data)
+- **Disaster Recovery**: Not applicable for demo application
+- **Backup**: Not required for demo application
 
 ### 3.4 Operational
 
-- **Monitoring**: CloudWatch logs for Lambda function execution and Step Functions execution history
-- **Logging**: 
-  - Lambda function logs input message and execution status
-  - Step Functions execution logs available in AWS Console
-- **Alerting**: Not required (demo environment)
+- **Monitoring**: CloudWatch logs for Lambda function execution
+- **Logging**: Step Functions execution history, Lambda CloudWatch logs, DynamoDB operations
+- **Alerting**: Not required for demo application
 
 ## 4. Technical Specifications
 
 ### 4.1 Architecture
 
-**Architecture Approach**: Serverless architecture using AWS managed services (Step Functions, Lambda, DynamoDB)
+**Architecture Approach**: Serverless architecture using AWS Step Functions to orchestrate Lambda and DynamoDB operations.
 
 **Architecture Diagram**: Visual representation of the AWS architecture:
 
@@ -94,95 +108,69 @@
 
 **Figure 1: AWS Architecture Diagram**
 
-> **Note**: The architecture diagram is automatically generated based on the requirements. If the diagram is missing or incomplete, ensure that Section 4.2 (AWS Services) contains sufficient detail about the services and components to be used.
-
 **Technology Stack**:
 
-- **Programming Language**: Python 3.12
-- **Framework**: AWS SDK for Python (boto3)
-- **Infrastructure as Code**: Terraform
-- **Database**: DynamoDB (NoSQL)
+- **Infrastructure as Code**: Terraform (based on existing project structure)
+- **Programming Language**: Python (for Lambda function, based on existing project structure)
+- **Orchestration**: AWS Step Functions
+- **Compute**: AWS Lambda
+- **Database**: AWS DynamoDB
 
 ### 4.2 AWS Services
 
-- **Compute**: AWS Lambda (Python 3.12 runtime)
-- **Orchestration**: AWS Step Functions (Standard execution type)
-- **Storage**: Amazon DynamoDB (On-Demand billing mode)
-- **Security**: AWS IAM (roles and policies)
-- **Monitoring**: Amazon CloudWatch (logs and execution history)
+- **Compute**: AWS Lambda (hello world function - returns "hello world" message, fire-and-forget execution)
+- **Orchestration**: AWS Step Functions (state machine - supports parallel execution of Lambda and DynamoDB operations)
+- **Storage**: AWS DynamoDB (demo table with generated ID as partition key)
+- **Security**: AWS IAM (roles and permissions - standard Step Functions, Lambda, and DynamoDB permissions only)
+- **Monitoring**: AWS CloudWatch (logs and metrics)
 
 ### 4.3 Integration Points
 
 **External Systems**: None (standalone demo application)
 
-**API Contracts**: 
-- Step Functions state machine accepts JSON input: `{"message": "<string>"}`
-- Lambda function receives event from Step Functions
-- DynamoDB PutItem operation with record structure: `{id: <string>, Timestamp: <ISO-8601-string>, Message: <string>}`
+**API Contracts**:
 
-**Data Formats**: JSON for input/output, ISO 8601 for timestamps
+- Step Functions execution API accepts JSON input: `{"message": "string"}`
+- Lambda function receives event from Step Functions
+- DynamoDB PutItem operation with timestamp and message
+
+**Data Formats**:
+
+- Input: JSON format with `message` field
+- Output: DynamoDB record with `timestamp` and `message` fields
 
 ### 4.4 Environment Requirements
 
-- **Environments**: Single development/demo environment
-- **Deployment**: Terraform-based infrastructure deployment
+- **Environments**: Demo environment
 - **AWS Region**: us-east-1
-
-### 4.5 Component Specifications
-
-#### Lambda Function Configuration
-- **Runtime**: Python 3.12
-- **Memory**: 128 MB
-- **Timeout**: 30 seconds
-- **Handler**: Lambda handler function that processes input and logs execution
-- **Logging**: Input message and execution status to CloudWatch
-
-#### Step Functions State Machine Configuration
-- **Name**: demoawsaistatemachine
-- **Execution Type**: Standard
-- **State Machine Definition**: 
-  - State 1: Invoke Lambda function (Task state)
-  - State 2: Insert record to DynamoDB (Task state)
-- **Error Handling**: None (basic demo)
-
-#### DynamoDB Table Configuration
-- **Table Name**: demoawsaidynamodb
-- **Partition Key**: id (String)
-- **Sort Key**: None
-- **Billing Mode**: On-Demand
-- **Attributes**: 
-  - id (String) - Partition key
-  - Timestamp (String) - ISO 8601 format timestamp
-  - Message (String) - Message from input payload
+- **Deployment**: Infrastructure as Code (Terraform) deployment
 
 ## 5. Acceptance Criteria
 
 ### 5.1 Functional Acceptance
 
-- [ ] Step Functions state machine is created and deployable
-- [ ] Lambda function is created, deployable, and executable
-- [ ] DynamoDB table is created with correct schema (id, Timestamp, Message)
-- [ ] Step Functions state machine successfully triggers Lambda function when executed
-- [ ] Lambda function processes input message and logs execution status
-- [ ] Step Functions state machine successfully inserts record into DynamoDB
-- [ ] DynamoDB record contains correct id, Timestamp, and Message values
-- [ ] End-to-end execution flow works: Input → Step Functions → Lambda → DynamoDB
+- [ ] Step Functions state machine is created and can be executed
+- [ ] Step Functions state machine accepts JSON input with `message` field
+- [ ] Lambda function is triggered successfully by Step Functions
+- [ ] DynamoDB record is inserted with correct timestamp (current time) and message (from input)
+- [ ] All components are properly integrated and functional
+- [ ] Workflow executes in correct sequence: input → Lambda → DynamoDB
 
 ### 5.2 Non-Functional Acceptance
 
-- [ ] IAM roles are configured with least privilege permissions
-- [ ] CloudWatch logs are generated for Lambda execution
-- [ ] Step Functions execution history is available in AWS Console
-- [ ] Terraform code successfully deploys all infrastructure components
-- [ ] All components are properly integrated and functional
+- [ ] IAM roles and permissions are configured with least privilege
+- [ ] CloudWatch logs are available for Lambda function execution
+- [ ] Step Functions execution history is accessible
+- [ ] Infrastructure is deployed using Terraform
+- [ ] Code follows existing project structure and standards
 
 ## 6. Dependencies
 
 ### 6.1 Technical Dependencies
 
-- **Other JIRA Tickets**: None
-- **External Services**: AWS Step Functions, AWS Lambda, Amazon DynamoDB, AWS IAM, Amazon CloudWatch
-- **Infrastructure**: AWS account with appropriate permissions, Terraform installed and configured
+- **Other JIRA Tickets**: None identified
+- **External Services**: None
+- **Infrastructure**: AWS account with appropriate permissions for Step Functions, Lambda, and DynamoDB
 
 ### 6.2 Team Dependencies
 
@@ -193,29 +181,44 @@
 
 > **IMPORTANT**: This section should be **EMPTY** during initial requirements generation. No assumptions should be made. If information is missing or ambiguous, add it as a question in the "Open Questions" section using `[Answer]:` tags.
 
-- _No assumptions - all information has been clarified from ticket comments and technical specifications_
+- _No assumptions - all information should be clarified through Open Questions section_
 
 ## 8. Risks
 
-- **RISK-1**: Lambda function timeout if processing takes longer than 30 seconds
-  - **Impact**: Low
-  - **Mitigation**: 30-second timeout is sufficient for demo "hello world" function
+- **RISK-1**: Lambda function execution failure
 
-- **RISK-2**: DynamoDB write throttling if multiple concurrent executions
-  - **Impact**: Low
-  - **Mitigation**: On-Demand billing mode automatically handles scaling
-
-- **RISK-3**: IAM permission misconfiguration preventing service interactions
   - **Impact**: Medium
-  - **Mitigation**: Follow least privilege principle and test IAM roles during deployment
+  - **Mitigation**: If Lambda function fails, Step Functions workflow will not retry (as per requirements). Configure CloudWatch logs for debugging. Workflow will continue to DynamoDB insertion even if Lambda fails (fire-and-forget behavior).
 
-## 9. Open Questions
+- **RISK-2**: DynamoDB write failure
 
-> **CRITICAL**: This section is **MANDATORY** for identifying ambiguities. All missing or unclear information must be documented here using the format shown below. Requirements approval should not proceed until all blocking questions have `[Answer]:` filled in.
+  - **Impact**: High
+  - **Mitigation**: If DynamoDB insert fails, Step Functions workflow will fail the execution (as per requirements). Verify IAM permissions and table configuration before deployment.
 
-All questions have been answered based on ticket comments and technical specifications. No open questions remain.
+- **RISK-3**: IAM permission misconfiguration
+  - **Impact**: High
+  - **Mitigation**: Follow least privilege principle, test permissions during deployment
 
----
+## 9. Resolved Questions
 
-**Document Status**: Complete - All technical specifications provided, no blocking questions
+All questions have been answered and incorporated into the requirements document above. The following clarifications were provided:
 
+1. **Lambda Function Behavior**: Lambda function should just return "hello world" message (no processing of input message required).
+
+2. **Lambda Return Data**: Lambda execution is fire-and-forget (no return data needed by Step Functions).
+
+3. **DynamoDB Table Name**: Any naming convention is acceptable.
+
+4. **DynamoDB Partition Key**: Generated ID will be used as the partition key (primary key).
+
+5. **Workflow Execution**: Lambda invocation and DynamoDB insertion can run in parallel.
+
+6. **AWS Region**: Resources will be deployed to us-east-1.
+
+7. **Environment**: Demo environment.
+
+8. **Lambda Failure Handling**: If Lambda function fails, no retry will be attempted (workflow continues to DynamoDB insertion due to fire-and-forget behavior).
+
+9. **DynamoDB Failure Handling**: If DynamoDB insert fails, Step Functions workflow will fail the execution.
+
+10. **IAM Permissions**: Standard Step Functions, Lambda, and DynamoDB permissions only (no additional requirements).
