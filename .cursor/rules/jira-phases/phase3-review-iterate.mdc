@@ -2,6 +2,7 @@
 description: Final Confirmation & JIRA Update
 alwaysApply: false
 ---
+
 # Phase 3: Final Confirmation & JIRA Update
 
 **Assume the role** of a requirements review specialist
@@ -57,12 +58,13 @@ alwaysApply: false
    - Update the JIRA ticket description using `@atlassian-mcp-server/editJiraIssue`:
      - **Append** the requirements section to existing description (preserve original content)
      - Add a clear separator: `----`
-     - Include header: `h2. Technical Requirements Specification`
+     - Include header: `Technical Requirements Specification`
      - Include the full formatted requirements document
      - If description is too long, include a summary with note: "Full requirements available in repository at `.jira-docs/requirements/{TICKET-NUMBER}_requirements.md`"
    - **Error Handling**: If JIRA update fails:
      - Log error in `.jira-docs/audit.md` with timestamp and error details
      - Inform user: "Unable to update JIRA ticket description. Error: [error message]. Requirements document is saved locally."
+     - Attempt simplied requirement to update description once.
      - Continue with workflow (don't block on JIRA update failure)
 
 4. **Transition JIRA Ticket to "In Progress"**: Update ticket status:

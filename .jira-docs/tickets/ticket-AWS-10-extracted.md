@@ -3,76 +3,78 @@
 **Ticket Key**: AWS-10
 **Ticket Title**: Demo step function application
 **Ticket Type**: Task
-**Status**: To Do
+**Status**: In Progress
 **Priority**: Medium
 
-## Key Information for Requirements Generation
+## Core Requirements
 
-### Ticket Summary
-Demo step function application
-
-### Description
+### Objective
 Create a sample step function state machine that:
-1. Trigger hello world lambda
-2. Insert a record into a demo dynamo db received from step function input json.
+1. Triggers a hello world lambda function
+2. Inserts a record into a demo DynamoDB table received from step function input JSON
 
-**JSON Input Format**:
+### Input Format
 ```json
 {
   "message": "Hello step function"
 }
 ```
 
-**DynamoDB Record Structure**:
-- Timestamp: current timestamp
-- Message: as per payload
+### DynamoDB Record Structure
+- **Timestamp**: Current timestamp
+- **Message**: As per payload (from input JSON)
 
-### Acceptance Criteria
-Not explicitly provided in ticket description. Will need to be derived from the description during requirements generation.
+## Technical Specifications (from Comments)
 
-### Ticket Type Analysis
-- **Type**: Task
-- **Scope**: AWS Step Functions workflow with Lambda and DynamoDB integration
-- **Complexity**: Medium (involves Step Functions, Lambda, and DynamoDB)
+### Technology Stack
+- **Programming Language**: Python 3.12
+- **Framework**: AWS SDK for Python (boto3)
+- **Infrastructure as Code**: Terraform
+- **AWS Region**: us-east-1
 
-### Key Requirements Identified
-1. Create AWS Step Functions state machine
-2. Deploy a "Hello World" Lambda function
-3. Create a demo DynamoDB table
-4. Configure Step Functions to trigger Lambda function
-5. Configure Step Functions to insert record into DynamoDB
-6. Handle JSON input with "message" field
-7. DynamoDB record should include:
-   - Timestamp (current timestamp)
-   - Message (from input payload)
+### Lambda Function Configuration
+- **Runtime**: Python 3.12
+- **Memory**: 128 MB
+- **Timeout**: 30 seconds
+- **Logging**: Input message and execution status to CloudWatch
 
-### Dependencies
-- **Linked Tickets**: None identified
-- **Subtasks**: None
-- **Related Issues**: None
+### Step Functions State Machine Configuration
+- **Name**: demoawsaistatemachine
+- **Execution Type**: Standard
+- **Error Handling**: None (basic demo)
 
-### Technical Context
-- **AWS Services Involved**: 
-  - Step Functions (State Machine)
-  - Lambda (Hello World function)
-  - DynamoDB (Demo table)
-  - IAM (for permissions)
-- **Infrastructure Type**: Serverless workflow orchestration
-- **Data Flow**: Step Functions → Lambda → DynamoDB
+### DynamoDB Table Configuration
+- **Table Name**: demoawsaidynamodb
+- **Partition Key**: id (String)
+- **Sort Key**: None
+- **Billing Mode**: On-Demand
+- **Attributes**: 
+  - id (String)
+  - Timestamp (ISO 8601 string)
+  - Message (string)
 
-### Questions to Clarify (for Phase 2)
-1. What Infrastructure as Code (IaC) tool should be used? (Terraform, CDK, CloudFormation)
-2. What region should the resources be deployed in?
-3. What should be the Lambda function runtime? (Python, Node.js, etc.)
-4. What should be the Lambda function memory and timeout?
-5. What should be the DynamoDB table name?
-6. What should be the DynamoDB table partition key structure?
-7. Should the DynamoDB table have a sort key?
-8. What should be the Step Functions state machine name?
-9. What should be the execution type for Step Functions? (Standard or Express)
-10. Should there be error handling in the Step Functions workflow?
-11. What IAM permissions are needed for Step Functions to invoke Lambda and write to DynamoDB?
-12. Should the Lambda function log anything to CloudWatch?
-13. What should be the DynamoDB table billing mode? (On-demand or Provisioned)
-14. Should the DynamoDB table have any additional attributes beyond Timestamp and Message?
+## Acceptance Criteria (Inferred)
+
+1. Step function state machine successfully triggers Lambda function
+2. Lambda function executes and processes input message
+3. DynamoDB record is created with:
+   - Unique id
+   - Current timestamp
+   - Message from input payload
+4. All components are properly configured and integrated
+5. Basic AWS service functionality is operational
+
+## Dependencies
+
+- AWS Lambda service
+- AWS Step Functions service
+- AWS DynamoDB service
+- IAM roles and permissions for service interactions
+
+## Notes
+
+- This is a demo/learning project
+- Requirements document already exists at `.jira-docs/requirements/AWS-10_requirements.md`
+- Architecture diagram is available in repository
+- All 15 open questions have been answered and incorporated
 
