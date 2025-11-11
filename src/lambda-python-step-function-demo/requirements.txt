@@ -1,6 +1,0 @@
-# Changelog:
-# AWS-10 - Initial dependencies for Step Functions demo Lambda - 2025-01-28
-
-# AWS SDK for Python (boto3) is included in Lambda runtime
-# No additional dependencies required for basic Hello World functionality
-
