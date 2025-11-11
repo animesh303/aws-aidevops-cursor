@@ -14,6 +14,32 @@ Always follow this workflow when user mentions implementing requirements from JI
 
 **CRITICAL**: When performing any phase, you MUST read and use relevant content from rule detail files in `.cursor/rules/code-phases/` directory. Do not summarize or paraphrase - use the complete content as written.
 
+## MANDATORY: MCP Server Integration
+
+**CRITICAL**: When performing code generation operations, leverage available MCP servers to enhance capabilities:
+
+### AWS MCP Server Integration
+
+- **Resource Management**: Use `aws-mcp-server` to check existing AWS resources before generating infrastructure code
+- **Resource Validation**: Validate generated infrastructure against AWS service limits and best practices
+- **Deployment**: Use AWS MCP to deploy resources after code generation (if approved)
+- **Resource Queries**: Query AWS resources to understand current infrastructure state
+
+### Terraform MCP Server Integration
+
+- **State Management**: Use `terraform-mcp-server` to check Terraform state and validate infrastructure
+- **Plan Operations**: Generate Terraform plans using MCP server
+- **Apply Operations**: Apply Terraform changes using MCP server (with approval)
+- **State Operations**: Query and manage Terraform state via MCP
+
+### Git MCP Server Integration
+
+- **Version Control**: Use `git-mcp-server` for commit operations and branch management
+- **Change Tracking**: Track code changes and generate commit messages
+- **Branch Operations**: Create feature branches for code generation
+
+**Usage Pattern**: When generating infrastructure code, use MCP servers to validate against real AWS resources and Terraform state before finalizing code.
+
 ## MANDATORY: Session Continuity
 
 **CRITICAL**: When detecting an existing code generation project, you MUST:

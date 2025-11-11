@@ -43,6 +43,33 @@ Always follow this workflow when user mentions CICD GitHub workflow generation. 
 
 **CRITICAL**: When performing any phase, you MUST read and use relevant content from rule detail files in `.cursor/rules/cicd-phases/` directory. Do not summarize or paraphrase - use the complete content as written.
 
+## MANDATORY: MCP Server Integration
+
+**CRITICAL**: When performing CI/CD workflow generation, leverage available MCP servers to enhance capabilities:
+
+### GitHub MCP Server Integration
+
+- **Workflow Management**: Use `github-mcp-server` to check existing GitHub Actions workflows
+- **Repository Analysis**: Analyze repository structure, branches, and settings via GitHub MCP
+- **Workflow Deployment**: Create or update GitHub Actions workflows using MCP server
+- **Workflow Execution**: Trigger workflow runs and check workflow status via MCP
+- **Secrets Management**: Check GitHub secrets availability for CI/CD workflows
+
+### AWS MCP Server Integration
+
+- **Resource Validation**: Validate AWS resources referenced in workflows exist and are accessible
+- **IAM Roles**: Verify IAM roles and permissions needed for CI/CD workflows
+- **Environment Setup**: Check AWS environments and configurations via MCP
+- **Deployment Validation**: Validate deployment targets and environments
+
+### Docker MCP Server Integration
+
+- **Container Operations**: Use `docker-mcp-server` for container build and push operations in workflows
+- **Image Management**: Manage Docker images and registries via MCP
+- **Container Validation**: Validate container configurations and dependencies
+
+**Usage Pattern**: When generating CI/CD workflows, use MCP servers to validate GitHub repository settings, AWS resources, and Docker configurations before finalizing workflows.
+
 ## MANDATORY: Smart Context Loading for Resume
 
 **CRITICAL**: When resuming at any phase, you MUST automatically load all relevant artifacts from previous phases:
