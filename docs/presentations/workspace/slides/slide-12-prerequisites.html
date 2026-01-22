@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+html { background: #FFFFFF; }
+body {
+  width: 720pt; height: 405pt; margin: 0; padding: 0;
+  background: #FFFFFF; font-family: Arial, sans-serif;
+  display: flex; flex-direction: column;
+}
+.content {
+  flex: 1; padding: 40pt 60pt 110pt 60pt; overflow: hidden;
+}
+.title-wrapper {
+  margin-bottom: 18pt;
+}
+.title-wrapper h1 {
+  color: #232F3E; font-size: 38pt; margin: 0 0 12pt 0;
+  font-weight: bold;
+}
+.title-border {
+  width: 100pt; height: 4pt; background: #FF9900;
+  margin: 0;
+}
+.prereq-container {
+  display: flex; flex-direction: column; gap: 12pt;
+  margin-top: 10pt;
+}
+.prereq-section h2 {
+  color: #232F3E; font-size: 20pt; margin: 0 0 6pt 0;
+  font-weight: bold;
+}
+.prereq-section ul {
+  color: #232F3E; font-size: 14pt; line-height: 1.3;
+  margin: 0; padding-left: 30pt;
+}
+.prereq-section li {
+  margin: 2pt 0;
+}
+</style>
+</head>
+<body>
+<div class="content">
+<div class="title-wrapper">
+<h1>Getting Started - Prerequisites</h1>
+<div class="title-border"></div>
+</div>
+<div class="prereq-container">
+<div class="prereq-section">
+<h2>AWS Account Setup</h2>
+<ul>
+<li>✅ AWS Account</li>
+<li>✅ Appropriate IAM permissions</li>
+<li>✅ Bedrock access enabled</li>
+<li>✅ Region selection (us-east-1, us-west-2, etc.)</li>
+</ul>
+</div>
+<div class="prereq-section">
+<h2>Development Environment</h2>
+<ul>
+<li>AWS CLI configured</li>
+<li>AWS SDK installed</li>
+<li>Python/Node.js/Java (your choice)</li>
+</ul>
+</div>
+</div>
+</div>
+</body>
+</html>

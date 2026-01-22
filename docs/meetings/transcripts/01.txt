@@ -1,0 +1,264 @@
+Topic: Web-based Customer Experience Management Application for Energy Utility
+
+Participants:
+	•	Rajiv Mehta (RM) – IT Manager, Energy Utility Company
+	•	Anita Sharma (AS) – Sales Representative, IT Consulting Firm
+
+AS:
+Good morning, Rajiv. Thanks for taking the time today. Hope you're doing well.
+
+RM:
+Good morning, Anita. Doing well, thanks. Hope the same with you.
+
+AS:
+All good here as well. Before we start, just to align—this call is mainly a discovery session. We'd like to understand your current challenges, future vision, and priorities so that we can come back with a meaningful solution rather than something generic.
+
+RM:
+That sounds perfect. We want to make sure we're solving the right problems.
+
+AS:
+Exactly. I'll ask a lot of questions, some business-focused and some technical. Please feel free to interrupt or add context anytime.
+
+RM:
+Sure, go ahead.
+
+AS:
+To begin with, could you give me a brief overview of your organization and your role?
+
+RM:
+Sure. We're a regional electricity distribution utility. We serve residential consumers, commercial establishments, and a few small industrial units.
+I head IT applications, which includes customer-facing systems, billing integrations, and internal operational tools.
+
+AS:
+Got it. And what are the key challenges that pushed you to think about a new customer experience platform?
+
+RM:
+Customer expectations have changed a lot. People expect digital-first services now.
+Our problem is that customer interactions are scattered—new connections are handled one way, complaints another way, outages mostly through call centers. There's no single system that gives a unified view of the customer.
+
+AS:
+So both customers and internal teams feel the pain?
+
+RM:
+Exactly. Customers feel we're slow and opaque. Internally, teams struggle because data is spread across systems and even spreadsheets.
+
+AS:
+So today, customers interact through multiple channels—call center, emails, walk-in offices?
+
+RM:
+Yes. And each channel operates almost independently. A customer might log a complaint via email, then call the helpline, and the agent has no visibility of the email interaction.
+
+AS:
+That leads to repeated explanations and frustration.
+
+RM:
+Absolutely. And it reflects badly on us, even if the actual resolution is happening behind the scenes.
+
+AS:
+Understood. So the goal is one centralized, web-based platform for all customer interactions.
+
+RM:
+Yes. A single source of truth for customer engagement.
+
+AS:
+When you think about "customer experience management," what does an ideal future state look like?
+
+RM:
+From a customer's perspective, they should be able to do everything online—apply for a new connection, check application status, pay fees, raise complaints, track outages, and receive updates without calling us.
+
+AS:
+And internally?
+
+RM:
+Internally, we want visibility. For any customer, we should see their entire journey—applications, complaints, outages faced, payments, communication history.
+This helps us improve service and also respond better when a customer escalates.
+
+AS:
+So transparency, speed, and consistency.
+
+RM:
+Exactly.
+
+AS:
+Let's deep dive into new connection requests. How does this work today?
+
+RM:
+Customers usually fill out a physical form or download a PDF. They submit documents at our office. Payments are done at a counter or via separate portals.
+After that, the application moves through multiple departments—engineering, field inspection, approvals—mostly via emails or internal notes.
+
+AS:
+That sounds time-consuming and error-prone.
+
+RM:
+It is. Customers keep calling to ask, "Where is my application stuck?"
+
+AS:
+What would you like to see in the new system?
+
+RM:
+A guided digital journey. The system should validate inputs, allow document uploads, calculate fees automatically, and support online payments.
+Once submitted, the application should move through predefined stages with ownership clearly defined.
+
+AS:
+Would customers be able to track each stage?
+
+RM:
+Yes. Even a simple progress tracker—submitted, under verification, inspection scheduled, approved, meter installed—would make a huge difference.
+
+AS:
+And SLAs?
+
+RM:
+Very important. Residential connections within 7 days, commercial within maybe 15.
+If something breaches SLA, supervisors should get alerts automatically.
+
+AS:
+Let's talk about incidents and outages.
+
+RM:
+This is where we face the most pressure. During outages, our call center gets overwhelmed.
+
+AS:
+How do customers currently report outages?
+
+RM:
+Mostly via calls. Some emails. Very few digital options.
+
+AS:
+What's your expectation from the new platform?
+
+RM:
+Customers should be able to report outages via web or mobile.
+But more importantly, for large outages, they shouldn't have to report at all—the system should proactively show that an outage is already known.
+
+AS:
+That requires integration with grid or SCADA systems.
+
+RM:
+Yes. Even if it's phase two, we want the architecture to support it.
+
+AS:
+And visibility to customers?
+
+RM:
+Status updates—outage identified, crew assigned, estimated restoration time. This alone will reduce calls by 50%.
+
+AS:
+Apart from outages, what other service requests are common?
+
+RM:
+Billing disputes, incorrect meter readings, meter faults, voltage fluctuation complaints, name changes, load enhancement requests.
+
+AS:
+Do these follow different processes internally?
+
+RM:
+Yes. Some are finance-driven, some require field visits, some need approvals.
+The system should support different workflows without custom coding every time.
+
+AS:
+So a configurable workflow engine would be ideal.
+
+RM:
+Exactly.
+
+AS:
+How do you currently communicate updates to customers?
+
+RM:
+Mostly SMS and email, but it's triggered manually or through batch jobs.
+
+AS:
+What would an ideal communication model look like?
+
+RM:
+Event-driven notifications. If status changes, customer gets notified automatically.
+Also, a portal inbox where customers can see all messages in one place.
+
+AS:
+Would you also want multilingual support?
+
+RM:
+Yes, at least English and the local language.
+
+AS:
+Let's talk about internal users.
+
+RM:
+We'll have call center agents, field technicians, supervisors, department managers, and system administrators.
+
+AS:
+Role-based access is critical then.
+
+RM:
+Yes. A technician shouldn't see billing details. Managers should see KPIs, not operational clutter.
+
+AS:
+Understood.
+
+AS:
+What kind of insights are important for leadership?
+
+RM:
+Complaint trends, outage frequency, SLA compliance, customer satisfaction scores, regional performance comparisons.
+
+AS:
+Do you want real-time dashboards or periodic reports?
+
+RM:
+Both. Real-time dashboards during outages or peak demand, and scheduled reports for reviews.
+
+AS:
+Any non-functional expectations we should be aware of?
+
+RM:
+Scalability is critical. During major outages, traffic can spike 10x.
+Availability also—downtime during a crisis is unacceptable.
+
+AS:
+And security?
+
+RM:
+Strong role-based access, audit logs, encryption, and compliance with data protection regulations.
+
+AS:
+Which existing systems should this platform integrate with?
+
+RM:
+Billing, payment gateways, GIS, outage management, possibly CRM.
+
+AS:
+Are these modern systems?
+
+RM:
+A mix. Some expose APIs, some are legacy. We expect phased integration.
+
+AS:
+Any preference for deployment?
+
+RM:
+Cloud-first, but compliant and secure. Hybrid is acceptable.
+
+AS:
+Technology stack preferences?
+
+RM:
+No strict preference, but it should be future-proof and easy to maintain.
+
+AS:
+Timeline?
+
+RM:
+MVP in 4–6 months focusing on new connections and service requests.
+
+AS:
+This has been extremely insightful, Rajiv. We'll consolidate these inputs and come back with a solution approach, phased roadmap, and architecture.
+
+RM:
+Great. This platform is a strategic priority for us.
+
+AS:
+We understand. Thanks again for your time.
+
+RM:
+Thank you, Anita. Looking forward to the proposal. Bye.
