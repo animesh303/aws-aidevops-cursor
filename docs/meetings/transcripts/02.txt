@@ -1,0 +1,59 @@
+IT Manager (PharmaCo):
+Thanks for joining today. We’re evaluating options to migrate one of our core applications and its database from our on-prem data center to AWS. I wanted to understand how you typically approach this.
+
+IT Consultant (Sales Rep):
+Happy to be here. To start with, could you give me a quick overview of the application—its purpose, tech stack, and criticality to your business?
+
+IT Manager:
+Sure. It’s a regulatory reporting and batch-processing application used by our R&D and quality teams. The application is Java-based, runs on WebLogic, and uses an Oracle database. It’s business-critical, especially during audit and submission cycles.
+
+IT Consultant:
+Got it. Given the regulatory nature, I assume compliance and data integrity are top priorities?
+
+IT Manager:
+Absolutely. We need to meet GxP requirements, ensure audit trails, data immutability where required, and strong access controls. Downtime tolerance is low during peak reporting periods.
+
+IT Consultant:
+That makes sense. In similar pharma engagements, we usually start with a discovery and assessment phase. This helps us decide whether a re-host, re-platform, or partial modernization approach is best. Do you already have a target timeline in mind?
+
+IT Manager:
+Leadership is pushing for completion within six to nine months. But they’re also cautious—we can’t compromise validation or compliance just to move faster.
+
+IT Consultant:
+That’s a very reasonable stance. For regulated workloads, we often recommend a phased migration. For example, starting with a lift-and-shift of the application to EC2, while moving the database to a managed service like Amazon RDS for Oracle—assuming licensing permits.
+
+IT Manager:
+Licensing is actually one of our concerns. We’re currently using Oracle Enterprise Edition with several add-ons.
+
+IT Consultant:
+Understood. In that case, we can evaluate Bring Your Own License versus alternative options, such as Amazon Aurora PostgreSQL, but only if refactoring and re-validation are acceptable. Otherwise, staying on Oracle initially is perfectly fine.
+
+IT Manager:
+How do you handle data migration and cutover? Data accuracy is non-negotiable for us.
+
+IT Consultant:
+We typically use AWS Database Migration Service for continuous replication. That allows us to keep source and target databases in sync until cutover, minimizing downtime. We also plan multiple mock migrations and reconciliation checks before the final move.
+
+IT Manager:
+That’s reassuring. What about security and access control? Our security team will be deeply involved.
+
+IT Consultant:
+As they should be. We design the environment using AWS best practices—private VPCs, encryption at rest and in transit, IAM-based access control, and detailed logging via CloudTrail and CloudWatch. We also support validation documentation aligned to your quality processes.
+
+IT Manager:
+Good. One more thing—our operations team is small. We don’t want to increase overhead after migration.
+
+IT Consultant:
+That’s actually one of the biggest advantages of AWS. By using managed services and automation, we can reduce patching, backup, and infrastructure maintenance effort. We also provide knowledge transfer sessions so your team is comfortable post go-live.
+
+IT Manager:
+Sounds promising. What would the next steps look like if we decide to move forward?
+
+IT Consultant:
+Next step would be a formal assessment workshop—typically two to three weeks. After that, we deliver a migration strategy, target architecture, cost estimate, and a detailed project plan. From there, you can make an informed decision.
+
+IT Manager:
+Great. Let’s set up the assessment. I’ll loop in our security and validation leads as well.
+
+IT Consultant:
+Perfect. I’ll share a proposal and sample deliverables by end of week. Looking forward to working together.
