@@ -8,8 +8,7 @@
 
    - Read epics document
    - Read stories document
-   - Read tasks document
-   - Read subtasks document
+   - Read tasks document (note: file contains subtasks, not tasks)
    - Read sprint plan
    - Read backlog organization
    - Read review summary
@@ -57,42 +56,25 @@
      - Link story to epic using `@atlassian-mcp-server/editJiraIssue` if needed
      - Log story creation in `.jira-epic-docs/audit.md`
 
-5. **Create Tasks in JIRA**: Create all tasks using Atlassian MCP:
+5. **Create Subtasks in JIRA**: Create all subtasks using Atlassian MCP:
 
-   - For each task in tasks document:
-     - Use `@atlassian-mcp-server/getJiraProjectIssueTypesMetadata` to get Task issue type ID
-     - Use `@atlassian-mcp-server/createJiraIssue` to create task:
-       - `cloudId`: Cloud ID from step 2
-       - `projectKey`: Selected project key
-       - `issueTypeName`: "Task"
-       - `summary`: Task title
-       - `description`: Task description (markdown format)
-       - `additional_fields`: Include task-specific fields:
-         - `priority`: Task priority
-         - `labels`: Task labels
-         - `parent`: Story key (if story link exists)
-         - `timeoriginalestimate`: Estimated duration in seconds
-     - Store created task key in `.jira-epic-docs/jira-items/created-tasks.md`
-     - Link task to story using `@atlassian-mcp-server/editJiraIssue` if needed
-     - Log task creation in `.jira-epic-docs/audit.md`
-
-6. **Create Subtasks in JIRA**: Create all subtasks using Atlassian MCP:
-
-   - For each subtask in subtasks document:
+   - **CRITICAL**: Use "Subtask" issue type (not "Task") for items that belong to Stories. Tasks are top-level issue types in JIRA and cannot be children of Stories. Subtasks can be linked to Stories via the parent field.
+   - For each subtask in tasks document (note: file is named tasks.md but contains subtasks):
      - Use `@atlassian-mcp-server/getJiraProjectIssueTypesMetadata` to get Subtask issue type ID
      - Use `@atlassian-mcp-server/createJiraIssue` to create subtask:
        - `cloudId`: Cloud ID from step 2
        - `projectKey`: Selected project key
-       - `issueTypeName`: "Subtask"
+       - `issueTypeName`: "Subtask" (NOT "Task")
        - `summary`: Subtask title
        - `description`: Subtask description (markdown format)
        - `additional_fields`: Include subtask-specific fields:
          - `priority`: Subtask priority
          - `labels`: Subtask labels
-         - `parent`: Task key (if task link exists)
-         - `timeoriginalestimate`: Estimated duration in seconds
-     - Store created subtask key in `.jira-epic-docs/jira-items/created-subtasks.md`
-     - Link subtask to task using `@atlassian-mcp-server/editJiraIssue` if needed
+         - `parent`: Story key (REQUIRED - use object format: `{"parent": {"key": "STORY-KEY"}}`)
+         - `timeoriginalestimate`: Estimated duration in seconds (optional)
+     - **Parent Linking**: The parent field MUST be set during creation using object format: `{"parent": {"key": "STORY-KEY"}}`. This links the subtask to its parent story.
+     - Store created subtask key in `.jira-epic-docs/jira-items/created-tasks.md` (note: file tracks subtasks)
+     - If parent linking fails during creation, use `@atlassian-mcp-server/editJiraIssue` to set parent: `{"parent": {"key": "STORY-KEY"}}`
      - Log subtask creation in `.jira-epic-docs/audit.md`
 
 7. **Create Dependencies**: Link items based on dependencies:
@@ -130,8 +112,7 @@
     - Include:
       - Total epics created
       - Total stories created
-      - Total tasks created
-      - Total subtasks created
+      - Total subtasks created (using Subtask issue type)
       - Dependencies created
       - Sprint assignments
       - Backlog organization
@@ -143,8 +124,7 @@
     - Show total items created
     - Show created epic keys
     - Show created story keys
-    - Show created task keys
-    - Show created subtask keys
+    - Show created subtask keys (using Subtask issue type)
     - Show dependencies created
     - Show sprint assignments
     - Show backlog organization
@@ -167,7 +147,9 @@
 
 ## JIRA Update Principles
 
-- **Sequential Creation**: Create items in order (epics → stories → tasks → subtasks)
+- **Sequential Creation**: Create items in order (epics → stories → subtasks)
+- **CRITICAL**: Use "Subtask" issue type (not "Task") for items under Stories. Tasks are top-level issue types and cannot be children of Stories.
+- **Parent Linking**: Subtasks must be linked to Stories via the parent field using object format: `{"parent": {"key": "STORY-KEY"}}`
 - **Error Handling**: Handle errors gracefully and continue with other items
 - **Verification**: Verify all items were created successfully
 - **Documentation**: Document all created items and any errors
@@ -177,8 +159,8 @@
 
 - [ ] All epics created successfully
 - [ ] All stories created successfully
-- [ ] All tasks created successfully
-- [ ] All subtasks created successfully
+- [ ] All subtasks created successfully (using Subtask issue type, not Task)
+- [ ] All subtasks linked to stories via parent field
 - [ ] All dependencies linked correctly
 - [ ] All sprint assignments completed
 - [ ] Backlog organized correctly

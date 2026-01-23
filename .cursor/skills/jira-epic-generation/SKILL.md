@@ -39,11 +39,11 @@ The process includes:
 
 ### Atlassian MCP Server Integration
 
-- **JIRA Operations**: Use `@atlassian-mcp-server` to create epics, stories, tasks, and subtasks
+- **JIRA Operations**: Use `@atlassian-mcp-server` to create epics, stories, and subtasks
 - **Project Management**: Get project details, issue types, and metadata via Atlassian MCP
 - **Issue Creation**: Create comprehensive JIRA items with all agile details
 - **Issue Updates**: Update JIRA items with descriptions, estimates, sprints, and backlogs
-- **Issue Linking**: Link epics to stories, stories to tasks, and manage dependencies
+- **Issue Linking**: Link epics to stories, stories to subtasks (via parent relationship), and manage dependencies
 - **Sprint Management**: Assign items to sprints and manage backlog organization
 
 ### Git MCP Server Integration
@@ -51,7 +51,7 @@ The process includes:
 - **Version Control**: Use `git-mcp-server` for commit operations and branch management
 - **Change Tracking**: Track generated JIRA items and commit artifacts to git
 
-**Usage Pattern**: When generating JIRA items, use Atlassian MCP to create epics, stories, and tasks with comprehensive agile details, then update JIRA upon user confirmation.
+**Usage Pattern**: When generating JIRA items, use Atlassian MCP to create epics, stories, and subtasks with comprehensive agile details. Subtasks must be created with parent linking to stories (not Tasks, which are top-level issue types). Then update JIRA upon user confirmation.
 
 ## MANDATORY: Session Continuity
 
@@ -86,12 +86,12 @@ The process includes:
 
 "📋 **Welcome to AWS Business Group JIRA Epic & Story Generation!** 📋
 
-I'll guide you through a streamlined 4-phase process to generate comprehensive JIRA epics, stories, and tasks from meeting transcripts.
+I'll guide you through a streamlined 4-phase process to generate comprehensive JIRA epics, stories, and subtasks from meeting transcripts.
 
 The process includes:
 
 - 📝 **Phase 1: Analyze Transcript** – Analyze meeting transcript, extract requirements, features, and user stories
-- 🏗️ **Phase 2: Generate JIRA Items** – Create comprehensive epics, stories, tasks with descriptions, estimates, sprints, and backlogs
+- 🏗️ **Phase 2: Generate JIRA Items** – Create comprehensive epics, stories, subtasks with descriptions, estimates, sprints, and backlogs
 - ✅ **Phase 3: Review & Confirm** – Review generated JIRA items, refine details, and confirm structure
 - 🚀 **Phase 4: Update JIRA** – Create/update JIRA items via Atlassian MCP upon final confirmation
 
@@ -232,7 +232,8 @@ When state file is missing or corrupted:
 ## Key Principles
 
 - Always analyze meeting transcript comprehensively to extract all requirements
-- Generate comprehensive JIRA items with all agile details (epics, stories, tasks, subtasks)
+- Generate comprehensive JIRA items with all agile details (epics, stories, subtasks)
+- **CRITICAL**: Use Subtask issue type (not Task) for items that belong to Stories. Tasks are top-level issue types in JIRA and cannot be children of Stories. Subtasks can be linked to Stories via the parent field using object format: `{"parent": {"key": "STORY-KEY"}}`
 - Include descriptions, acceptance criteria, estimates, sprints, backlogs, dependencies
 - Follow agile best practices and JIRA standards
 - Use Atlassian MCP to create/update JIRA items upon confirmation
@@ -261,7 +262,7 @@ When state file is missing or corrupted:
 - Extracted Requirements: `.jira-epic-docs/analysis/transcript-{TRANSCRIPT-ID}-requirements.md`
 - Generated Epics: `.jira-epic-docs/jira-items/epics.md`
 - Generated Stories: `.jira-epic-docs/jira-items/stories.md`
-- Generated Tasks: `.jira-epic-docs/jira-items/tasks.md`
+- Generated Subtasks: `.jira-epic-docs/jira-items/tasks.md` (note: file is named tasks.md but contains subtasks, not Tasks)
 - JIRA Items Summary: `.jira-epic-docs/jira-items/jira-items-summary.md`
 
 Use kebab-case for feature names (e.g., "analyze-transcript", "generate-epics-stories", "review-confirm", "update-jira").
@@ -290,22 +291,17 @@ The workflow generates comprehensive JIRA items with the following structure:
 - **Sprint Assignment**: Target sprint or backlog placement
 - **Labels**: Relevant labels (feature, bug, enhancement, etc.)
 
-### Task Structure
-- **Title**: Clear task description
-- **Description**: Detailed task description
-- **Acceptance Criteria**: Task completion criteria
-- **Story Link**: Link to parent story
-- **Estimated Duration**: Time estimate in hours
-- **Priority**: Task priority
-- **Dependencies**: Dependencies on other tasks
-- **Assignee**: Suggested assignee (if identifiable from transcript)
-
-### Subtask Structure
-- **Title**: Subtask description
-- **Description**: Subtask details
-- **Task Link**: Link to parent task
+### Subtask Structure (for items under Stories)
+- **Title**: Clear subtask description
+- **Description**: Detailed subtask description
+- **Acceptance Criteria**: Subtask completion criteria
+- **Story Link**: Link to parent story (via parent field in JIRA)
 - **Estimated Duration**: Time estimate in hours
 - **Priority**: Subtask priority
+- **Dependencies**: Dependencies on other subtasks
+- **Assignee**: Suggested assignee (if identifiable from transcript)
+
+**CRITICAL**: In JIRA, use the "Subtask" issue type (not "Task") for items that belong to Stories. Tasks are top-level issue types and cannot be children of Stories. Subtasks can be linked to Stories via the parent field.
 
 ## Principles
 
